@@ -5,7 +5,7 @@ from utils import create_masked_input
 from simulation import simulate_simulation
 
 class TemperatureDataset(Dataset):
-    def __init__(self, num_simulations, nx, ny, dx, dy, nt=100, dt=0.001, noise_amplitude=0.05):
+    def __init__(self, num_simulations, nx, ny, dx, dy, nt=100, dt=0.00005, noise_amplitude=0.05):
         # We'll store snapshots from time steps t = 1, 2, ..., nt-1 for each simulation
         snapshots = []
         for i in range(num_simulations): 
@@ -13,7 +13,8 @@ class TemperatureDataset(Dataset):
             # Run the simulation to get the full time series T
             T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude)
             # Exclude the initial condition (t=0) and add remaining snapshots
-            snapshots.append(T_series[random.randint(1, nt - 1)])
+            rand_idx = random.randint(1, nt - 1)
+            snapshots.append(T_series[rand_idx])
         # Stack all snapshots into a tensor of shape (num_samples, nx, ny)
         self.data = torch.stack(snapshots, dim=0)
         

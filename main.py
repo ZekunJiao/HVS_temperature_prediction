@@ -56,7 +56,7 @@ def main():
     # Set grid and dataset parameters
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 10  # Number of different simulation samples
+    num_simulations = 1000  # Number of different simulation samples
 
     # Create dataset
     dataset = TemperatureDataset(num_simulations, nx, ny, dx, dy)

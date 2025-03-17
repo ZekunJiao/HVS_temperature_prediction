@@ -31,7 +31,7 @@ def generate_simulation(nx, ny, dx, dy, t, noise_amplitude=0.05):
     initial_with_noise = initial_condition + noise
     return initial_with_noise
 
-def simulate_simulation(nx, ny, dx, dy, nt=100, dt=0.001, noise_amplitude=0.05):
+def simulate_simulation(nx, ny, dx, dy, nt=100, dt=0.00005, noise_amplitude=0.05):
     """
     Simulates the heat equation starting from a noisy initial condition.
     Returns a tensor T of shape (nt, nx, ny) representing the time evolution.
@@ -41,7 +41,8 @@ def simulate_simulation(nx, ny, dx, dy, nt=100, dt=0.001, noise_amplitude=0.05):
     T[0] = generate_simulation(nx, ny, dx, dy, 0, noise_amplitude)
     
     # Define the diffusion coefficient (can be made heterogeneous if desired)
-    D = torch.ones_like(T[0]) * 0.1
+    D = torch.ones_like(T[0, :, :]) * 0.1
+    D[40:50, 0:99] = 0.02
     
     # Time integration loop using RK4
     for t in range(nt - 1):
