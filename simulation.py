@@ -6,7 +6,7 @@ import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.05, device='cpu'):
+def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.00, device='cpu'):
     """Generate a simulation with a randomized Gaussian initial condition and noise on GPU."""
     # Define grid coordinates
     x = torch.linspace(0, (nx-1)*dx, nx, device=device)
@@ -17,8 +17,8 @@ def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.05, device='cpu'):
     center_x = torch.rand(1, device=device).item() * (nx * dx)
     center_y = torch.rand(1, device=device).item() * (ny * dy)
     amplitude = 1 + torch.rand(1, device=device).item() * 0.5
-    variance_x = 1  # Variance in x-direction (controls horizontal spread)
-    variance_y = 0.2   # Variance in y-direction (controls vertical spread)
+    variance_x = torch.rand(1, device=device).item()  # Variance in x-direction (controls horizontal spread)
+    variance_y = torch.rand(1, device=device).item()  # Variance in y-direction (controls vertical spread)
 
     # Compute Gaussian function with different variances
     initial_condition = amplitude * torch.exp(-(((X - center_x)**2 / variance_x) + ((Y - center_y)**2 / variance_y)))
@@ -36,7 +36,7 @@ def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.05, device='cpu'):
     initial_with_noise = initial_condition + noise
     return initial_with_noise
 
-def simulate_simulation(nx, ny, dx, dy, nt=200, dt=0.0001, noise_amplitude=0.05, device='cpu'):
+def simulate_simulation(nx, ny, dx, dy, nt=200, dt=0.0001, noise_amplitude=0.00, device='cpu'):
     """
     Simulates the heat equation using RK4, fully utilizing CUDA.
     Returns a tensor T of shape (nt, nx, ny) stored on `device`.
@@ -79,52 +79,56 @@ def visualize_simulation(T, timesteps=[0, 10, 50, -1], device='cpu'):
     plt.show()
 
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# Simulation parameters
-nx, ny = 100, 100  # Number of grid points
-dx, dy = 0.01, 0.01  # Grid spacing
-dt = 0.0001  # Time step
-nt = 4000  # Number of time steps     # Time step size
+if __name__ == "__main__":
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-# Run the simulation
-T = simulate_simulation(nx, ny, dx, dy, nt=nt, dt=dt, device=device)
+    # Simulation parameters
+    nx, ny = 100, 100  # Number of grid points
+    dx, dy = 0.01, 0.01  # Grid spacing
+    dt = 0.0001  # Time step
+    nt = 4000  # Number of time steps     # Time step size
 
-# Visualize results at key time points
-# visualize_simulation(T, timesteps=[0, 10, 50, -1], device=device)
+    # Run the simulation
+    T = simulate_simulation(nx, ny, dx, dy, nt=nt, dt=dt, device=device)
+    vmin = torch.min(T).cpu().item()
+    vmax = torch.max(T).cpu().item()
 
-import numpy as np
-from IPython.display import HTML
-import matplotlib.animation as animation
+    # Visualize results at key time points
+    # visualize_simulation(T, timesteps=[0, 10, 50, -1], device=device)
 
-plt.figure(figsize=(6, 5))
-plt.imshow(T[0].cpu().numpy(), cmap='viridis', origin='lower')
-plt.colorbar(label='Temperature')
-plt.title("Initial Condition (t = 0)")
-plt.xlabel("x")
-plt.ylabel("y")
-plt.show()
+    import numpy as np
+    from IPython.display import HTML
+    import matplotlib.animation as animation
 
-fig, ax = plt.subplots(figsize=(8, 6))
-cp = ax.imshow(np.zeros((nx, ny)), cmap='viridis', vmin=torch.min(T).cpu().item(), vmax=torch.max(T).cpu().item())  # Initialize empty frame
-cbar = plt.colorbar(cp)
-ax.set_xlabel('x')
-ax.set_ylabel('y')
-ax.set_title('Predicted Solution u(x,t)')
-time_steps = torch.linspace(0, nt-1, 100)  
+    plt.figure(figsize=(6, 5))
+    plt.imshow(T[0].cpu().numpy(), cmap='viridis', origin="lower")
+    plt.colorbar(label='Temperature')
+    plt.title("Initial Condition (t = 0)")
+    plt.xlabel("x")
+    plt.ylabel("y")
+    plt.show()
 
-# Function to update the frame
-T = T.cpu()
-def update(frame):
-    # t = time_steps[frame] * torch.ones(x_eval.shape)  # Update time
-    # pred = model(torch.vstack([x_eval, y_eval, t]).T)  # Get predictions
-    # pred = pred.reshape(40, 24).T.detach().numpy()  # Reshape for plotting
-    cp.set_data(T[time_steps[frame].long(), :, :])
-    ax.set_title(f'Predicted Solution u(x,t) at frame {frame}')  # Update title
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cp = ax.imshow(np.zeros((nx, ny)), cmap='viridis', vmin=vmin, vmax=vmax, origin="lower")  # Initialize empty frame
+    cbar = plt.colorbar(cp)
+    ax.set_xlabel('x')
+    ax.set_ylabel('y')
+    ax.set_title('Simulation at frame ')
+    time_steps = torch.linspace(0, nt-1, 100)  
 
-    return [cp]
+    # Function to update the frame
+    T = T.cpu()
+    def update(frame):
+        # t = time_steps[frame] * torch.ones(x_eval.shape)  # Update time
+        # pred = model(torch.vstack([x_eval, y_eval, t]).T)  # Get predictions
+        # pred = pred.reshape(40, 24).T.detach().numpy()  # Reshape for plotting
+        cp.set_data(T[time_steps[frame].long(), :, :])
+        ax.set_title(f'Simulation at frame {frame}')  # Update title
 
-ani = animation.FuncAnimation(fig, update, frames=len(time_steps), interval=100, blit=False)
+        return [cp]
 
-# Display animation in Jupyter Notebook
-plt.show()
+    ani = animation.FuncAnimation(fig, update, frames=len(time_steps), interval=100, blit=False)
+
+    # Display animation in Jupyter Notebook
+    plt.show()

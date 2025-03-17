@@ -34,7 +34,6 @@ def rk4_step(T, D, dx, dy, dt):
 def create_masked_input(full_field, observed_fraction=0.05):
     """Create a binary mask and the corresponding partial field, ensuring CUDA compatibility."""
     device = full_field.device  # Ensure operations are done on the correct device
-    print("full field device", device)
 
     mask = torch.zeros_like(full_field, device=device)  # Ensure mask is on GPU if full_field is
     num_points = full_field.numel()  # Total number of elements in the tensor

@@ -28,7 +28,7 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss:.6f}")
 
 
-def visualize_predictions(model, test_dataset, num_samples=5, device='cpu'):
+def visualize_predictions(model, test_dataset, num_samples=5, device='cpu', save_folder="result",  filename='predictions.png'):
     model.eval()
     
     fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
@@ -54,18 +54,24 @@ def visualize_predictions(model, test_dataset, num_samples=5, device='cpu'):
         fig.colorbar(im3, ax=ax3)
 
     plt.tight_layout()
+
+    save_path = os.path.join(save_folder, filename)
+    plt.savefig(save_path)
+    print(f"Figure saved to {save_path}")
     plt.show()
+
 
 def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+    script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
+    os.chdir(script_dir)  # Set script directory as working directory
 
-    # Set grid and dataset parameters
-    nx, ny = 100, 100
-    dx, dy = 0.01, 0.01
-    num_simulations = 2  # Number of different simulation samples
+    save_path = os.path.join(script_dir, "datasets", "t=50.pt")
 
     # Create dataset
-    dataset = TemperatureDataset(num_simulations, nx, ny, dx, dy, dt=0.0001)
+    if os.path.exists(save_path):
+        print(f"✅ Loading dataset from {save_path}...")
+        dataset = TemperatureDataset(torch.load(save_path))
 
     # Define the split ratio (e.g., 80% train, 20% test)
     train_size = int(0.8 * len(dataset))
@@ -80,15 +86,16 @@ def main():
 
     # Set up model, loss, and optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("using device: ", device)
     model = SimpleCNN().to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Train the model
-    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=2, device=device)
+    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=50, device=device)
 
     # Visualize predictions
-    visualize_predictions(model, test_dataset, num_samples=5, device=device)
+    visualize_predictions(model, test_dataset, num_samples=10, device=device)
 
 if __name__ == "__main__":
     main()
