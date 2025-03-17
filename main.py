@@ -8,6 +8,7 @@ from torch.utils.data import random_split
 
 from dataset import TemperatureDataset
 from model import SimpleCNN
+import os
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, device):
     for epoch in range(epochs):
@@ -26,40 +27,45 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, 
         epoch_loss = running_loss / len(train_loader.dataset)
         print(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss:.6f}")
 
+
 def visualize_predictions(model, test_dataset, num_samples=5, device='cpu'):
     model.eval()
+    
+    fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
+
     for i in range(min(num_samples, len(test_dataset))):
         input_sample, target_sample = test_dataset[i]
         with torch.no_grad():
             prediction = model(input_sample.unsqueeze(0).to(device)).cpu().squeeze()
 
-        plt.figure(figsize=(12, 4))
-        plt.subplot(1, 3, 1)
-        plt.title("Partial Input")
-        plt.imshow(input_sample[0], cmap='viridis')
-        plt.colorbar()
+        # Select row of subplots
+        ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
-        plt.subplot(1, 3, 2)
-        plt.title("Ground Truth")
-        plt.imshow(target_sample.squeeze(), cmap='viridis')
-        plt.colorbar()
+        ax1.set_title("Partial Input")
+        im1 = ax1.imshow(input_sample[0].cpu().numpy(), cmap='viridis')
+        fig.colorbar(im1, ax=ax1)
 
-        plt.subplot(1, 3, 3)
-        plt.title("Prediction")
-        plt.imshow(prediction, cmap='viridis')
-        plt.colorbar()
+        ax2.set_title("Ground Truth")
+        im2 = ax2.imshow(target_sample.squeeze().cpu().numpy(), cmap='viridis')
+        fig.colorbar(im2, ax=ax2)
 
-        plt.tight_layout()
-        plt.show()
+        ax3.set_title("Prediction")
+        im3 = ax3.imshow(prediction, cmap='viridis')
+        fig.colorbar(im3, ax=ax3)
+
+    plt.tight_layout()
+    plt.show()
 
 def main():
+    os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
     # Set grid and dataset parameters
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 1000  # Number of different simulation samples
+    num_simulations = 2  # Number of different simulation samples
 
     # Create dataset
-    dataset = TemperatureDataset(num_simulations, nx, ny, dx, dy)
+    dataset = TemperatureDataset(num_simulations, nx, ny, dx, dy, dt=0.0001)
 
     # Define the split ratio (e.g., 80% train, 20% test)
     train_size = int(0.8 * len(dataset))
@@ -79,7 +85,7 @@ def main():
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Train the model
-    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=50, device=device)
+    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=2, device=device)
 
     # Visualize predictions
     visualize_predictions(model, test_dataset, num_samples=5, device=device)

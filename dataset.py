@@ -3,6 +3,7 @@ import random
 from torch.utils.data import Dataset
 from utils import create_masked_input
 from simulation import simulate_simulation
+import os
 
 class TemperatureDataset(Dataset):
     def __init__(self, num_simulations, nx, ny, dx, dy, nt=100, dt=0.00005, noise_amplitude=0.05):
@@ -11,7 +12,9 @@ class TemperatureDataset(Dataset):
         for i in range(num_simulations): 
             print(f"generating simulation {i}")
             # Run the simulation to get the full time series T
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude)
+            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device=device)
             # Exclude the initial condition (t=0) and add remaining snapshots
             rand_idx = random.randint(1, nt - 1)
             snapshots.append(T_series[rand_idx])
