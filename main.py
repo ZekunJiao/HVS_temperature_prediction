@@ -3,12 +3,19 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.data import random_split
 
 from dataset import TemperatureDataset
-from model import SimpleCNN
+from model import SimpleCNN, ComplexCNN, GlobalDilatedCNN
 import os
+from datetime import datetime
+
+
+from torch.utils.tensorboard import SummaryWriter
+
+# Initialize TensorBoard writer
+writer = SummaryWriter("runs/training_experiment")
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, device):
     for epoch in range(epochs):
@@ -25,7 +32,10 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, 
             optimizer.step()
             running_loss += loss.item() * inputs.size(0)
         epoch_loss = running_loss / len(train_loader.dataset)
+        writer.add_scalar("Loss/train", epoch_loss, epoch)
+
         print(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss:.6f}")
+    writer.close()
 
 
 def visualize_predictions(model, test_dataset, num_samples=5, device='cpu', save_folder="result",  filename='predictions.png'):
@@ -42,15 +52,15 @@ def visualize_predictions(model, test_dataset, num_samples=5, device='cpu', save
         ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
         ax1.set_title("Partial Input")
-        im1 = ax1.imshow(input_sample[0].cpu().numpy(), cmap='viridis')
+        im1 = ax1.imshow(input_sample[0].cpu().numpy().T, cmap='viridis', origin="lower")
         fig.colorbar(im1, ax=ax1)
 
         ax2.set_title("Ground Truth")
-        im2 = ax2.imshow(target_sample.squeeze().cpu().numpy(), cmap='viridis')
+        im2 = ax2.imshow(target_sample.squeeze().cpu().numpy().T, cmap='viridis', origin="lower")
         fig.colorbar(im2, ax=ax2)
 
         ax3.set_title("Prediction")
-        im3 = ax3.imshow(prediction, cmap='viridis')
+        im3 = ax3.imshow(prediction.T, cmap='viridis', origin="lower")
         fig.colorbar(im3, ax=ax3)
 
     plt.tight_layout()
@@ -65,13 +75,14 @@ def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
-
-    save_path = os.path.join(script_dir, "datasets", "t=50.pt")
+    data_file_name = "n=1000,mask=0.01,gaussian_left_half.pt"
+    save_path = os.path.join(script_dir, "datasets", data_file_name)
 
     # Create dataset
     if os.path.exists(save_path):
-        print(f"✅ Loading dataset from {save_path}...")
-        dataset = TemperatureDataset(torch.load(save_path))
+        print(f" ############## DATASET: {data_file_name} ##################")
+        dataset = torch.load(save_path, weights_only=False)
+        print("Dataset size", len(dataset))
 
     # Define the split ratio (e.g., 80% train, 20% test)
     train_size = int(0.8 * len(dataset))
@@ -80,6 +91,10 @@ def main():
     # Randomly split the dataset into train and test sets
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
+    subset_indices = list(range(32))
+    train_dataset = Subset(dataset, subset_indices)
+    test_dataset = Subset(test_dataset, subset_indices)
+
     # Create dataloaders for the training and testing sets
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
@@ -87,15 +102,17 @@ def main():
     # Set up model, loss, and optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("using device: ", device)
-    model = SimpleCNN().to(device)
+    model = GlobalDilatedCNN().to(device)
     criterion = nn.MSELoss()
     optimizer = optim.Adam(model.parameters(), lr=0.001)
 
     # Train the model
-    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=50, device=device)
+    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=1000, device=device)
 
+    timestamp = datetime.now().strftime("%m%d-%H%M%S")
     # Visualize predictions
-    visualize_predictions(model, test_dataset, num_samples=10, device=device)
+    filename = f"{timestamp}.png"
+    visualize_predictions(model, test_dataset, num_samples=10, device=device, filename=filename)
 
 if __name__ == "__main__":
     main()

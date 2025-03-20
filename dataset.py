@@ -6,7 +6,7 @@ from simulation import simulate_simulation
 import os
 
 class TemperatureDataset(Dataset):
-    def __init__(self, num_simulations, nx, ny, dx, dy, nt=100, dt=0.00005, noise_amplitude=0.05, save_path=None):
+    def __init__(self, num_simulations, nx, ny, dx, dy, nt, dt, noise_amplitude, save_path=None):
         # We'll store snapshots from time steps t = 1, 2, ..., nt-1 for each simulation
         snapshots = []
         for i in range(num_simulations): 
@@ -17,7 +17,7 @@ class TemperatureDataset(Dataset):
             T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device=device)
             # Exclude the initial condition (t=0) and add remaining snapshots
             rand_timeframe = random.randint(1, nt - 1)
-            snapshots.append(T_series[99])
+            snapshots.append(T_series[nt - 1])
         # Stack all snapshots into a tensor of shape (num_samples, nx, ny)
         self.data = torch.stack(snapshots, dim=0)
 
@@ -32,7 +32,7 @@ class TemperatureDataset(Dataset):
     
     def __getitem__(self, idx):
         full_field = self.data[idx]  # shape: (nx, ny)
-        input_tensor = create_masked_input(full_field, observed_fraction=0.05)
+        input_tensor = create_masked_input(full_field, observed_fraction=0.02)
         # Add a channel dimension to full_field (target is one-channel)
         target = full_field.unsqueeze(0)
         return input_tensor, target
@@ -51,6 +51,6 @@ if __name__ == "__main__":
         print("no such path")
         exit()
 
-    dataset = TemperatureDataset(num_simulations, nx, ny, dx, dy, nt=1000, dt=0.0001, noise_amplitude=0, save_path=save_path)
+    dataset = TemperatureDataset(num_simulations, nx, ny, dx, dy, nt=300, dt=0.0001, noise_amplitude=0, save_path=save_path)
 
     print(f"Dataset size: {len(dataset)} samples")

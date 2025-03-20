@@ -13,15 +13,24 @@ def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.00, device='cpu'):
     y = torch.linspace(0, (ny-1)*dy, ny, device=device)
     X, Y = torch.meshgrid(x, y, indexing='ij')
 
+    length_x = nx * dx
+    length_y = ny * dy
+
     # Randomized Gaussian parameters (placed on GPU)
-    center_x = torch.rand(1, device=device).item() * (nx * dx)
-    center_y = torch.rand(1, device=device).item() * (ny * dy)
+    center_x = torch.rand(1, device=device).item() * length_x
+    center_y = torch.rand(1, device=device).item() * length_y
+
+    # center_x = torch.rand(1, device=device).item() * (0.9 - 0.1) * length_x + 0.1 * length_x
+    # center_y = torch.rand(1, device=device).item() * (0.9 - 0.1) * length_y + 0.1 * length_y
+
     amplitude = 1 + torch.rand(1, device=device).item() * 0.5
-    variance_x = torch.rand(1, device=device).item()  # Variance in x-direction (controls horizontal spread)
-    variance_y = torch.rand(1, device=device).item()  # Variance in y-direction (controls vertical spread)
+
+    variance_x = torch.rand(1, device=device).item() * 3 # Variance in x-direction (controls horizontal spread)
+    variance_y = torch.rand(1, device=device).item() * 3  # Variance in y-direction (controls vertical spread)
 
     # Compute Gaussian function with different variances
     initial_condition = amplitude * torch.exp(-(((X - center_x)**2 / variance_x) + ((Y - center_y)**2 / variance_y)))
+    print("center x", center_x, "center y", center_y, "variance x", variance_x, "variance y", variance_y)
 
     # Create block-wise noise (on GPU)
     segment_size = 2
@@ -36,7 +45,7 @@ def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.00, device='cpu'):
     initial_with_noise = initial_condition + noise
     return initial_with_noise
 
-def simulate_simulation(nx, ny, dx, dy, nt=200, dt=0.0001, noise_amplitude=0.00, device='cpu'):
+def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude=0.00, device='cpu'):
     """
     Simulates the heat equation using RK4, fully utilizing CUDA.
     Returns a tensor T of shape (nt, nx, ny) stored on `device`.
@@ -48,8 +57,8 @@ def simulate_simulation(nx, ny, dx, dy, nt=200, dt=0.0001, noise_amplitude=0.00,
     T[0] = generate_simulation(nx, ny, dx, dy, noise_amplitude, device=device)
 
     # Define the diffusion coefficient (D) on GPU
-    D = torch.ones_like(T[0], device=device) * 0.1
-    D[40:50, 0:99] = 0.02  # Specific region diffusion coefficient
+    D = torch.ones_like(T[0], device=device) * 0.3
+    # D[40:50, 0:99] = 0.06  # Specific region diffusion coefficient
 
     # Time integration loop using RK4
     for t in range(nt - 1):
@@ -87,7 +96,7 @@ if __name__ == "__main__":
     nx, ny = 100, 100  # Number of grid points
     dx, dy = 0.01, 0.01  # Grid spacing
     dt = 0.0001  # Time step
-    nt = 4000  # Number of time steps     # Time step size
+    nt = 800  # Number of time steps     # Time step size
 
     # Run the simulation
     T = simulate_simulation(nx, ny, dx, dy, nt=nt, dt=dt, device=device)
@@ -102,7 +111,7 @@ if __name__ == "__main__":
     import matplotlib.animation as animation
 
     plt.figure(figsize=(6, 5))
-    plt.imshow(T[0].cpu().numpy(), cmap='viridis', origin="lower")
+    plt.imshow(T[0].cpu().numpy().T, cmap='viridis', origin="lower")
     plt.colorbar(label='Temperature')
     plt.title("Initial Condition (t = 0)")
     plt.xlabel("x")
@@ -123,12 +132,13 @@ if __name__ == "__main__":
         # t = time_steps[frame] * torch.ones(x_eval.shape)  # Update time
         # pred = model(torch.vstack([x_eval, y_eval, t]).T)  # Get predictions
         # pred = pred.reshape(40, 24).T.detach().numpy()  # Reshape for plotting
-        cp.set_data(T[time_steps[frame].long(), :, :])
+        cp.set_data(T[time_steps[frame].long(), :, :].T)
         ax.set_title(f'Simulation at frame {frame}')  # Update title
-
+        for c in ax.collections:
+            c.remove()
         return [cp]
 
-    ani = animation.FuncAnimation(fig, update, frames=len(time_steps), interval=100, blit=False)
+    ani = animation.FuncAnimation(fig, update, frames=len(time_steps), interval=30, blit=False)
 
     # Display animation in Jupyter Notebook
     plt.show()

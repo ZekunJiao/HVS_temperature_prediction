@@ -31,12 +31,12 @@ def rk4_step(T, D, dx, dy, dt):
     k4 = heat_equation_rhs(T + dt * k3, D, dx, dy)
     return T + (dt / 6) * (k1 + 2 * k2 + 2 * k3 + k4)
 
-def create_masked_input(full_field, observed_fraction=0.05):
+def create_masked_input(full_field, observed_fraction):
     """Create a binary mask and the corresponding partial field, ensuring CUDA compatibility."""
     device = full_field.device  # Ensure operations are done on the correct device
 
     mask = torch.zeros_like(full_field, device=device)  # Ensure mask is on GPU if full_field is
-    num_points = full_field.numel()  # Total number of elements in the tensor
+    num_points = int(full_field.numel() / 2)  # Total number of elements in the tensor
     num_observed = int(observed_fraction * num_points)
 
     # Ensure indices are generated on the correct device
