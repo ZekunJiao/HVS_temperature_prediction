@@ -15,7 +15,8 @@ from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
 
 # Initialize TensorBoard writer
-writer = SummaryWriter("runs/training_experiment")
+timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
+writer = SummaryWriter(f"runs/{timestamp}")
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, device):
     for epoch in range(epochs):
@@ -35,6 +36,23 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, 
         writer.add_scalar("Loss/train", epoch_loss, epoch)
 
         print(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss:.6f}")
+
+        model.eval()
+        test_loss = 0.0
+        with torch.no_grad():
+            for inputs, targets in test_loader:
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+                outputs = model(inputs)
+                loss = criterion(outputs, targets)
+                test_loss += loss.item() * inputs.size(0)
+
+        test_loss /= len(test_loader.dataset)
+        print(f"Epoch {epoch+1}/{epochs}, Test Loss: {test_loss:.6f}")
+
+        # Log training & test loss to TensorBoard
+        writer.add_scalar("Loss/Train", train_loss, epoch)
+        writer.add_scalar("Loss/Test", test_loss, epoch)
     writer.close()
 
 
@@ -75,7 +93,7 @@ def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
-    data_file_name = "n=1000,mask=0.01,gaussian_left_half.pt"
+    data_file_name = "temperature_data.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
 
     # Create dataset
