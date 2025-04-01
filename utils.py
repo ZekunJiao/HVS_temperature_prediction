@@ -47,5 +47,23 @@ def create_masked_input(full_field, observed_fraction):
 
     # Use two channels: one for the partial field, one for the mask
     input_tensor = torch.stack([partial_field, mask], dim=0)
-
     return input_tensor
+
+def create_operator_input(full_field, observed_fraction):
+    """Create a binary mask and the corresponding partial field, ensuring CUDA compatibility."""
+    device = full_field.device  # Ensure operations are done on the correct device
+
+    mask = torch.zeros_like(full_field, device=device)  # Ensure mask is on GPU if full_field is
+    num_points = int(full_field.numel() / 2)  # Total number of elements in the tensor
+    num_observed = int(observed_fraction * num_points)
+
+    # Ensure indices are generated on the correct device
+    indices = torch.randperm(num_points, device=device)[:num_observed]
+
+    mask.view(-1)[indices] = 1  # Apply the mask
+
+    x = torch.nonzero(mask).reshape(2, -1).float()
+    u = full_field.view(-1)[indices]  # Mask the full field
+
+    return x, u
+

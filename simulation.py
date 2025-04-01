@@ -127,6 +127,7 @@ if __name__ == "__main__":
 
     # Function to update the frame
     T = T.cpu()
+    
     def update(frame):
         # t = time_steps[frame] * torch.ones(x_eval.shape)  # Update time
         # pred = model(torch.vstack([x_eval, y_eval, t]).T)  # Get predictions

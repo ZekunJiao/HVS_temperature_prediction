@@ -1,0 +1,22 @@
+using device:  cuda
+Epoch 1/10, Train Loss: 0.633204
+Epoch 1/10, Test Loss: 0.551182
+Epoch 2/10, Train Loss: 0.614054
+Epoch 2/10, Test Loss: 0.521041
+Epoch 3/10, Train Loss: 0.581308
+Epoch 3/10, Test Loss: 0.463386
+Epoch 4/10, Train Loss: 0.518262
+Epoch 4/10, Test Loss: 0.345244
+Epoch 5/10, Train Loss: 0.387412
+Epoch 5/10, Test Loss: 0.165804
+Epoch 6/10, Train Loss: 0.179055
+Epoch 6/10, Test Loss: 0.248444
+Epoch 7/10, Train Loss: 0.198399
+Epoch 7/10, Test Loss: 0.209148
+Epoch 8/10, Train Loss: 0.165013
+Epoch 8/10, Test Loss: 0.117913
+Epoch 9/10, Train Loss: 0.099992
+Epoch 9/10, Test Loss: 0.123918
+Epoch 10/10, Train Loss: 0.124559
+Epoch 10/10, Test Loss: 0.141884
+Figure saved to result\0324-142744.png

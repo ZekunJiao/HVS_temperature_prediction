@@ -7,16 +7,18 @@ from torch.utils.data import DataLoader, Subset
 from torch.utils.data import random_split
 
 from dataset import TemperatureDataset
-from model import SimpleCNN, ComplexCNN, GlobalDilatedCNN
+from model import SimpleCNN, ComplexCNN, GlobalDilatedCNN, FCN
 import os
 from datetime import datetime
 
-
 from torch.utils.tensorboard import SummaryWriter
+import wandb
 
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 writer = SummaryWriter(f"runs/{timestamp}")
+
+# Initialize a wandb run with a project name and config
 
 def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, device):
     for epoch in range(epochs):
@@ -32,10 +34,9 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, 
             loss.backward()
             optimizer.step()
             running_loss += loss.item() * inputs.size(0)
-        epoch_loss = running_loss / len(train_loader.dataset)
-        writer.add_scalar("Loss/train", epoch_loss, epoch)
+        train_loss = running_loss / len(train_loader.dataset)
 
-        print(f"Epoch {epoch+1}/{epochs}, Loss: {epoch_loss:.6f}")
+        print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.6f}")
 
         model.eval()
         test_loss = 0.0
@@ -53,10 +54,17 @@ def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, 
         # Log training & test loss to TensorBoard
         writer.add_scalar("Loss/Train", train_loss, epoch)
         writer.add_scalar("Loss/Test", test_loss, epoch)
+
+        # Log metrics to wandb
+        wandb.log({
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "test_loss": test_loss
+        })
     writer.close()
 
 
-def visualize_predictions(model, test_dataset, num_samples=5, device='cpu', save_folder="result",  filename='predictions.png'):
+def visualize_predictions(model, test_dataset, num_samples, device='cpu', save_folder="result",  filename='predictions.png'):
     model.eval()
     
     fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
@@ -85,6 +93,7 @@ def visualize_predictions(model, test_dataset, num_samples=5, device='cpu', save
 
     save_path = os.path.join(save_folder, filename)
     plt.savefig(save_path)
+    wandb.log({"Prediction": wandb.Image(fig)})
     print(f"Figure saved to {save_path}")
     plt.show()
 
@@ -93,7 +102,7 @@ def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
-    data_file_name = "temperature_data.pt"
+    data_file_name = "test_10_operator.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
 
     # Create dataset
@@ -102,35 +111,54 @@ def main():
         dataset = torch.load(save_path, weights_only=False)
         print("Dataset size", len(dataset))
 
-    # Define the split ratio (e.g., 80% train, 20% test)
+
+    epochs = 10
+    batch_size = 32
+    learning_rate = 0.001
+
+    hyperparams = {
+        "epochs": epochs,
+        "batch_size": batch_size,
+        "learning_rate": learning_rate,
+        "n_samples": len(dataset),
+        "dataset": data_file_name,
+        "comment": ""
+    }
+
+    # Log hyperparameters with initial dummy metrics
+    writer.add_hparams(hyperparams, {'initial_metric': 0.0})
+
     train_size = int(0.8 * len(dataset))
     test_size = len(dataset) - train_size
 
-    # Randomly split the dataset into train and test sets
+
+
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
 
     subset_indices = list(range(32))
     train_dataset = Subset(dataset, subset_indices)
     test_dataset = Subset(test_dataset, subset_indices)
 
-    # Create dataloaders for the training and testing sets
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    # Set up model, loss, and optimizer
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("using device: ", device)
-    model = GlobalDilatedCNN().to(device)
+    model = FCN().to(device)
+    wandb.watch(model, log="all")
+
     criterion = nn.MSELoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.001)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 
     # Train the model
-    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=1000, device=device)
+    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=epochs, device=device)
 
     timestamp = datetime.now().strftime("%m%d-%H%M%S")
     # Visualize predictions
     filename = f"{timestamp}.png"
     visualize_predictions(model, test_dataset, num_samples=10, device=device, filename=filename)
+    wandb.finish()
 
 if __name__ == "__main__":
+    print("######")
     main()

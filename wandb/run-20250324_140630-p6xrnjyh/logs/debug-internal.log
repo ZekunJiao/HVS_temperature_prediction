@@ -1,0 +1,11 @@
+{"time":"2025-03-24T14:06:31.041236+01:00","level":"INFO","msg":"stream: starting","core version":"0.19.8","symlink path":"C:\\Users\\q675000\\hvs_temperatur_prediction\\wandb\\run-20250324_140630-p6xrnjyh\\logs\\debug-core.log"}
+{"time":"2025-03-24T14:06:31.8286922+01:00","level":"INFO","msg":"created new stream","id":"p6xrnjyh"}
+{"time":"2025-03-24T14:06:31.8286922+01:00","level":"INFO","msg":"stream: started","id":"p6xrnjyh"}
+{"time":"2025-03-24T14:06:31.8286922+01:00","level":"INFO","msg":"writer: Do: started","stream_id":"p6xrnjyh"}
+{"time":"2025-03-24T14:06:31.8292017+01:00","level":"INFO","msg":"sender: started","stream_id":"p6xrnjyh"}
+{"time":"2025-03-24T14:06:31.8293707+01:00","level":"INFO","msg":"handler: started","stream_id":"p6xrnjyh"}
+{"time":"2025-03-24T14:06:31.8461476+01:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": Not Implemented"}
+{"time":"2025-03-24T14:06:33.9643407+01:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": Not Implemented"}
+{"time":"2025-03-24T14:06:38.1647263+01:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": Not Implemented"}
+{"time":"2025-03-24T14:06:47.5985748+01:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": Not Implemented"}
+{"time":"2025-03-24T14:07:04.6393086+01:00","level":"INFO","msg":"api: retrying error","error":"Post \"https://api.wandb.ai/graphql\": Not Implemented"}

@@ -1,4 +1,5 @@
 import torch.nn as nn
+import torch
 
 class SimpleCNN(nn.Module):
     def __init__(self):
@@ -64,3 +65,50 @@ class GlobalDilatedCNN(nn.Module):
         x = self.relu(self.conv6(x))  # Receptive field: 127x127 (63 + 2*(3-1)*16=127)
         out = self.conv_out(x)
         return out
+    
+class FCN(nn.Module):
+    def __init__(self):
+        super(FCN, self).__init__()
+        # Initial convolution: no dilation, basic feature extraction.
+        self.linear1 = nn.Linear(100, 64)
+        # Stacked dilated convolutions to expand the receptive field.
+        self.linear2 = nn.Linear(64, 64)
+        self.tanh = nn.Tanh()
+        self.linear3 = nn.Linear(64, 64)
+        self.linear4 = nn.Linear(64,10000)
+        
+    def forward(self, x):
+        x = torch.masked_select(x[:, :, :, 0], x[:, :, :, 1]).reshape(-1, 100)
+        x = self.linear1(x)
+        x = self.tanh(x)
+        x = self.linear2(x)
+        x = self.tanh(x)
+        x = self.linear3(x)
+        x = self.tanh(x)
+        x = self.linear4(x)
+        x = self.tanh(x)
+        return x.reshape(-1, 100, 100)
+    
+class FCN(nn.Module):
+    def __init__(self):
+        super(FCN, self).__init__()
+        # Initial convolution: no dilation, basic feature extraction.
+        self.linear1 = nn.Linear(100, 64)
+        # Stacked dilated convolutions to expand the receptive field.
+        self.linear2 = nn.Linear(64, 64)
+        self.tanh = nn.Tanh()
+        self.linear3 = nn.Linear(64, 64)
+        self.linear4 = nn.Linear(64,10000)
+        
+    def forward(self, x):
+        x = torch.masked_select(x[:, :, :, 0], x[:, :, :, 1]).reshape(-1, 100)
+        x = self.linear1(x)
+        x = self.tanh(x)
+        x = self.linear2(x)
+        x = self.tanh(x)
+        x = self.linear3(x)
+        x = self.tanh(x)
+        x = self.linear4(x)
+        x = self.tanh(x)
+        return x.reshape(-1, 100, 100)
+    

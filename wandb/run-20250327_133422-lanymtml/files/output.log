@@ -1,0 +1,22 @@
+using device:  cuda
+Traceback (most recent call last):
+  File "c:\Users\q675000\hvs_temperatur_prediction\main.py", line 163, in <module>
+    main()
+  File "c:\Users\q675000\hvs_temperatur_prediction\main.py", line 154, in main
+    train_model(model, train_loader, test_loader, criterion, optimizer, epochs=epochs, device=device)
+  File "c:\Users\q675000\hvs_temperatur_prediction\main.py", line 34, in train_model
+    outputs = model(inputs)
+              ^^^^^^^^^^^^^
+  File "C:\Users\q675000\AppData\Local\anaconda3\envs\exploration\Lib\site-packages\torch\nn\modules\module.py", line 1739, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\q675000\AppData\Local\anaconda3\envs\exploration\Lib\site-packages\torch\nn\modules\module.py", line 1845, in _call_impl
+    return inner()
+           ^^^^^^^
+  File "C:\Users\q675000\AppData\Local\anaconda3\envs\exploration\Lib\site-packages\torch\nn\modules\module.py", line 1793, in inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "c:\Users\q675000\hvs_temperatur_prediction\model.py", line 81, in forward
+    x = torch.masked_select(x[:, :, :, 0], x[:, :, :, 1]).reshape(-1, 100)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: masked_select: expected BoolTensor for mask

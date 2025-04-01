@@ -1,0 +1,15 @@
+{"time":"2025-03-27T13:34:22.6808181+01:00","level":"INFO","msg":"stream: starting","core version":"0.19.8","symlink path":"C:\\Users\\q675000\\hvs_temperatur_prediction\\wandb\\run-20250327_133422-lanymtml\\logs\\debug-core.log"}
+{"time":"2025-03-27T13:34:22.8061325+01:00","level":"INFO","msg":"created new stream","id":"lanymtml"}
+{"time":"2025-03-27T13:34:22.8071108+01:00","level":"INFO","msg":"stream: started","id":"lanymtml"}
+{"time":"2025-03-27T13:34:22.8071108+01:00","level":"INFO","msg":"handler: started","stream_id":"lanymtml"}
+{"time":"2025-03-27T13:34:22.8071108+01:00","level":"INFO","msg":"sender: started","stream_id":"lanymtml"}
+{"time":"2025-03-27T13:34:22.8071108+01:00","level":"INFO","msg":"writer: Do: started","stream_id":"lanymtml"}
+{"time":"2025-03-27T13:34:23.3007648+01:00","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-03-27T13:34:30.9520946+01:00","level":"INFO","msg":"stream: closing","id":"lanymtml"}
+{"time":"2025-03-27T13:34:30.9520946+01:00","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-03-27T13:34:30.9533364+01:00","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-03-27T13:34:31.6542935+01:00","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-03-27T13:34:32.0238127+01:00","level":"INFO","msg":"handler: closed","stream_id":"lanymtml"}
+{"time":"2025-03-27T13:34:32.0238127+01:00","level":"INFO","msg":"writer: Close: closed","stream_id":"lanymtml"}
+{"time":"2025-03-27T13:34:32.0238127+01:00","level":"INFO","msg":"sender: closed","stream_id":"lanymtml"}
+{"time":"2025-03-27T13:34:32.0243337+01:00","level":"INFO","msg":"stream: closed","id":"lanymtml"}
