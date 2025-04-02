@@ -5,6 +5,7 @@ from continuiti.trainer import Trainer
 from continuiti.trainer.callbacks import LearningCurve
 from continuiti.data.utility import split
 from dataset import OperatorTemperatureDataset
+from TensorBoardlogger import TensorBoardLogger
 
 import os
 from datetime import datetime
@@ -15,42 +16,6 @@ import wandb
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 writer = SummaryWriter(f"runs/{timestamp}")
-
-# Initialize a wandb run with a project name and config
-
-# def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, device):
-#     for epoch in range(epochs):
-#         model.train()
-#         running_loss = 0.0
-#         for inputs, targets in train_loader:
-#             inputs, targets = inputs.to(device), targets.to(device)
-#             optimizer.zero_grad()
-#             outputs = model(inputs)
-#             loss = criterion(outputs, targets)
-#             loss.backward()
-#             optimizer.step()
-#             for name, param in model.named_parameters():
-#                 writer.add_histogram(f'Weights/{name}', param, epoch)
-#                 if param.grad is not None:
-#                     writer.add_histogram(f'Gradients/{name}', param.grad, epoch)
-#             running_loss += loss.item() * inputs.size(0)
-#         train_loss = running_loss / len(train_loader.dataset)
-
-#         model.eval()
-#         test_loss = 0.0
-#         with torch.no_grad():
-#             for inputs, targets in test_loader:
-#                 inputs, targets = inputs.to(device), targets.to(device)
-#                 outputs = model(inputs)
-#                 loss = criterion(outputs, targets)
-#                 test_loss += loss.item() * inputs.size(0)
-#         test_loss /= len(test_loader.dataset)
-
-#         # Log losses to TensorBoard
-#         writer.add_scalar("Loss/Train", train_loss, epoch)
-#         writer.add_scalar("Loss/Test", test_loss, epoch)
-
-#         print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.6f}, Test Loss: {test_loss:.6f}")
 
 
 def visualize_predictions(operator, test_dataset, num_samples, writer, device='cpu', save_folder="result",  filename=None):
@@ -72,15 +37,10 @@ def visualize_predictions(operator, test_dataset, num_samples, writer, device='c
         x = x.to(device).unsqueeze(0)
         u = u.to(device).unsqueeze(0)
         y_field = y_field.to(device).unsqueeze(0)
-        print(x.shape)
-        print(u.shape)
-        print(y_field.shape)
-        print(y.shape)
 
         with torch.no_grad():
             prediction = operator(x, u, y_field).cpu().squeeze()
         
-        print(prediction.shape)
         # Select row of subplots
 
         x = x.cpu().squeeze(0).numpy()
@@ -88,24 +48,37 @@ def visualize_predictions(operator, test_dataset, num_samples, writer, device='c
 
         ax1.set_title("Partial Input")
         im1 = ax1.scatter(x[0,:], x[1,:], s=3)
+        ax1.set_xlim(0, 100)
+        ax1.set_ylim(0, 100)
         ax1.set_aspect("equal")
         fig.colorbar(im1, ax=ax1)
 
         ax2.set_title("Ground Truth")
         im2 = ax2.imshow(v.squeeze().cpu().numpy(), cmap='viridis', origin="lower")
         ax2.set_aspect("equal")
+        ax2.set_xlim(0, 100)
+        ax2.set_ylim(0, 100)
         fig.colorbar(im2, ax=ax2)
 
         ax3.set_title("Prediction")
         im3 = ax3.imshow(prediction, cmap='viridis', origin="lower")
         ax3.set_aspect("equal")
+        ax3.set_xlim(0, 100)
+        ax3.set_ylim(0, 100)
         fig.colorbar(im3, ax=ax3)
 
     plt.tight_layout()
 
+    # Save to file
     save_path = os.path.join(save_folder, filename)
     plt.savefig(save_path)
     print(f"Figure saved to {save_path}")
+    
+    # Log figure to TensorBoard
+    if writer is not None:
+        writer.add_figure('Predictions', fig, close=False)
+        print("Figure added to TensorBoard")
+    
     plt.show()
 
 
@@ -127,14 +100,33 @@ def main():
 
     train_dataset, test_dataset = split(dataset, 0.8)
 
-    operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=8, device=device)
+    # Define hyperparameters
+    trunk_depth = 8
+    epochs = 10
+    
+    operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=trunk_depth, device=device)
     trainer = Trainer(operator, device=device)
-    epochs = 2000
-    trainer.fit(train_dataset, test_dataset=train_dataset, callbacks=[LearningCurve()], epochs=epochs)
+    
+    # Collect hyperparameters in a dictionary
+    hparams = {
+        'trunk_depth': trunk_depth,
+        'epochs': epochs,
+        'dataset_size': len(dataset),
+        'model_type': 'DeepCatOperator'
+    }
+    
+    # Create TensorBoard logger
+    timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
+    log_dir = f"runs/{timestamp}"
+    tb_logger = TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams)
+    
+    trainer.fit(train_dataset, test_dataset=train_dataset, callbacks=[LearningCurve(), tb_logger], epochs=epochs)
     print("vizualizing")
 
-    visualize_predictions(operator, train_dataset, num_samples=10, writer=writer)
-    writer.close()
+    # Create a new writer for visualizations using the same log directory
+    viz_writer = SummaryWriter(log_dir)
+    visualize_predictions(operator, train_dataset, num_samples=10, writer=viz_writer, device=device)
+    viz_writer.close()  # Close the visualization writer when done
 
 if __name__ == "__main__":
     main()
