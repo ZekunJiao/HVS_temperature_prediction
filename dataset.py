@@ -195,6 +195,11 @@ class OperatorTemperatureDataset(OperatorDataset):
             
             x, u = create_operator_input(v, observed_fraction=0.02)
 
+            # plt.scatter(x[0], x[1])
+            # plt.xlim(0, 100)
+            # plt.ylim(0, 100)
+            # plt.show()
+
             grid_x, grid_y = torch.meshgrid(torch.arange(0, len(v), dtype=torch.float32), torch.arange(0, len(v), dtype=torch.float32))
             y = torch.stack([grid_x, grid_y])
 
@@ -233,10 +238,10 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    save_path = os.path.join(script_dir, "datasets", "operator_dataset_1.pt")
+    save_path = os.path.join(script_dir, "datasets", "operator_dataset_1000.pt")
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 10
+    num_simulations = 1000
     print(save_path)
     if not os.path.exists(os.path.dirname(save_path)):
         print("no such path")

@@ -55,6 +55,7 @@ writer = SummaryWriter(f"runs/{timestamp}")
 
 def visualize_predictions(operator, test_dataset, num_samples, writer, device='cpu', save_folder="result",  filename=None):
     operator.eval()
+    operator.to(device)
 
     if filename == None:
         timestamp = datetime.now().strftime("%m%d-%H%M%S")
@@ -128,11 +129,11 @@ def main():
 
     operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=8, device=device)
     trainer = Trainer(operator, device=device)
-    epochs = 1
-    # trainer.fit(train_dataset, test_dataset=test_dataset, callbacks=[LearningCurve()], epochs=epochs)
+    epochs = 2000
+    trainer.fit(train_dataset, test_dataset=train_dataset, callbacks=[LearningCurve()], epochs=epochs)
     print("vizualizing")
 
-    visualize_predictions(operator, test_dataset, num_samples=1, writer=writer, device=device)
+    visualize_predictions(operator, train_dataset, num_samples=10, writer=writer)
     writer.close()
 
 if __name__ == "__main__":

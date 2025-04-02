@@ -49,7 +49,7 @@ def create_masked_input(full_field, observed_fraction):
     input_tensor = torch.stack([partial_field, mask], dim=0)
     return input_tensor
 
-def create_operator_input(full_field, observed_fraction):
+def create_operator_input_2(full_field, observed_fraction):
     """Create a binary mask and the corresponding partial field, ensuring CUDA compatibility."""
     device = full_field.device  # Ensure operations are done on the correct device
 
@@ -64,6 +64,43 @@ def create_operator_input(full_field, observed_fraction):
 
     x = torch.nonzero(mask).reshape(2, -1).float()
     u = full_field.view(-1)[indices]  # Mask the full field
+    print(x.shape)
+
+    return x, u
+
+def create_operator_input(full_field, observed_fraction):
+    """
+    Create a partial input for an operator by randomly sampling a fraction of points
+    from the top half of a 2D tensor (full_field of shape (H, W)).
+
+    Args:
+        full_field (torch.Tensor): A 2D tensor of shape (H, W).
+        observed_fraction (float): Fraction of points to sample from the top half.
+
+    Returns:
+        x (torch.Tensor): Tensor of shape (2, num_observed) containing the (col, row) coordinates.
+        u (torch.Tensor): Tensor of shape (num_observed,) containing the sampled field values.
+    """
+    device = full_field.device
+    H, W = full_field.shape
+
+    # Restrict to the top half of the field
+    H_sample = H // 2
+    num_points_restricted = H_sample * W
+    num_observed = int(observed_fraction * num_points_restricted)
+
+    # Generate random flat indices from 0 to num_points_restricted - 1
+    indices = torch.randperm(num_points_restricted, device=device)[:num_observed]
+
+    # Convert flat indices to 2D coordinates (row, col)
+    row_indices = indices // W   # row index in range [0, H_sample)
+    col_indices = indices % W
+
+    # Stack to form coordinates: first row is column indices, second row is row indices
+    x = torch.stack([col_indices, row_indices]).float()  # Shape: (2, num_observed)
+
+    # Extract observed values from the top half of the field
+    u = full_field[:H_sample, :].view(-1)[indices]
 
     return x, u
 
