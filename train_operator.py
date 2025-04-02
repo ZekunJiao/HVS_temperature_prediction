@@ -102,7 +102,7 @@ def main():
 
     # Define hyperparameters
     trunk_depth = 8
-    epochs = 10
+    epochs = 1000
     
     operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=trunk_depth, device=device)
     trainer = Trainer(operator, device=device)

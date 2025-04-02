@@ -241,7 +241,7 @@ if __name__ == "__main__":
     save_path = os.path.join(script_dir, "datasets", "operator_dataset_1000.pt")
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 10
+    num_simulations = 1000
     print(save_path)
     if not os.path.exists(os.path.dirname(save_path)):
         print("no such path")
