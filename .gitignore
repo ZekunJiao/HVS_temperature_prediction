@@ -3,4 +3,4 @@ runs/*
 result/*
 datasets/*
 wandb/*
-savemodels/*
+saved_models/*

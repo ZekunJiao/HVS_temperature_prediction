@@ -4,14 +4,13 @@ from continuiti.operators import DeepCatOperator
 from continuiti.trainer import Trainer
 from continuiti.trainer.callbacks import LearningCurve
 from continuiti.data.utility import split
-from dataset import OperatorTemperatureDataset
 from Callbacks import ModelCheckpointCallback, TensorBoardLogger
 import random 
 import os
 from datetime import datetime
 
 from torch.utils.tensorboard import SummaryWriter
-import wandb
+from continuiti.trainer.scheduler import LinearLRScheduler
 
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
@@ -209,61 +208,58 @@ def main():
 
     model_name = f"{model_type}_{timestamp}"
 
-    scheduler = None
+    scheduler = LinearLRScheduler(optimizer=optimizer, max_epochs=epochs)
     ##################### Uncomment for load model #######################
 
-    checkpoint_path = os.path.join(script_dir, "saved_models", f"DeepCatOperator_04-03_10-01-12_final.pt")  # use your actual saved filename
-    checkpoint = torch.load(checkpoint_path, map_location=device)
+    # checkpoint_path = os.path.join(script_dir, "saved_models", f"DeepCatOperator_04-03_10-01-12_final.pt")  # use your actual saved filename
+    # checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    print("checkpoint", checkpoint.keys())
-    operator.load_state_dict(checkpoint['model_state_dict'])
-    operator.to(device)  # Ensure the model is on the correct device
+    # print("checkpoint", checkpoint.keys())
+    # operator.load_state_dict(checkpoint['model_state_dict'])
+    # operator.to(device)  # Ensure the model is on the correct device
 
-    optimizer = torch.optim.Adam(operator.parameters(), lr=0.001)
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    # optimizer = torch.optim.Adam(operator.parameters(), lr=0.001)
+    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 
-    if 'scheduler_state_dict' in checkpoint:
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
-        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-    print("Operator and optimizer state loaded successfully.")
+    # if 'scheduler_state_dict' in checkpoint:
+    #     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
+    #     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    # print("Operator and optimizer state loaded successfully.")
 
     #######################################################################
 
 
     # ################## Uncomment for train model #########################
 
-    # trainer = Trainer(operator=operator, optimizer=optimizer, device=device)
+    trainer = Trainer(operator=operator, optimizer=optimizer, device=device)
 
-    # if save_model:
-    #     checkpoint_callback = ModelCheckpointCallback(
-    #         operator,
-    #         trainer.optimizer,
-    #         save_dir=os.path.join(script_dir, "saved_models", model_name),
-    #         save_interval=250
-    #     ) 
-    # else:
-    #     None
+    if save_model:
+        checkpoint_callback = ModelCheckpointCallback(
+            operator,
+            trainer.optimizer,
+            save_dir=os.path.join(script_dir, "saved_models", model_name),
+            save_interval=250,
+            scheduler=scheduler
+        ) 
+    else:
+        None
     
-    # scheduler = scheduler if scheduler is not None else True
+    trainer.fit(train_dataset, test_dataset=test_dataset, callbacks=[LearningCurve(), tb_logger, checkpoint_callback], lr_scheduler=scheduler, epochs=epochs)
 
-    # trainer.fit(train_dataset, test_dataset=test_dataset, callbacks=[LearningCurve(), tb_logger, checkpoint_callback], lr_scheduler=scheduler, epochs=epochs)
+    model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
+    os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
+    final_checkpoint = {
+        'epoch': epochs,  # or use the last completed epoch if different
+        'model_state_dict': operator.state_dict(),
+        'optimizer_state_dict': trainer.optimizer.state_dict(),
+    }
 
-    # model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
-    # os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
-    # final_checkpoint = {
-    #     'epoch': epochs,  # or use the last completed epoch if different
-    #     'model_state_dict': operator.state_dict(),
-    #     'optimizer_state_dict': trainer.optimizer.state_dict(),
-    # }
+    final_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
 
-    # if trainer.scheduler is not None:
-    #     final_checkpoint['scheduler_state_dict'] = trainer.scheduler.state_dict()
-
-    # torch.save(final_checkpoint, model_save_path)
-    # print(f"Checkpoint saved to {model_save_path}")
+    torch.save(final_checkpoint, model_save_path)
+    print(f"Checkpoint saved to {model_save_path}")
 
     # ######################################################################
-
 
     visualize_predictions(operator, train_dataset, num_samples=10, device=device, log_dir=log_dir)
 
