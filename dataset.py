@@ -195,13 +195,18 @@ class OperatorTemperatureDataset(OperatorDataset):
             
             x, u = create_operator_input(v, observed_fraction=0.02)
 
-            # plt.scatter(x[0], x[1])
-            # plt.xlim(0, 100)
-            # plt.ylim(0, 100)
-            # plt.show()
 
             grid_x, grid_y = torch.meshgrid(torch.arange(0, len(v), dtype=torch.float32), torch.arange(0, len(v), dtype=torch.float32))
+
+            # Normalize the grid coordinates to [0,1]
+            grid_x = grid_x / (nx - 1)
+            grid_y = grid_y / (ny - 1)
             y = torch.stack([grid_x, grid_y])
+
+            # plt.scatter(x[0], x[1])
+            # plt.xlim(0, 1)
+            # plt.ylim(0, 1)
+            # plt.show()
 
             x_data.append(x)
             y_data.append(y)
@@ -212,9 +217,9 @@ class OperatorTemperatureDataset(OperatorDataset):
             torch.cuda.empty_cache()
         # Stack all snapshots into a tensor of shape (num_samples, nx, ny)
         
-        x_data = torch.stack(x_data, dim=0)
+        x_data = torch.stack(x_data, dim=0) 
         u_data = torch.stack(u_data, dim=0)
-        y_data = torch.stack(y_data, dim=0)
+        y_data = torch.stack(y_data, dim=0) 
         v_data = torch.stack(v_data, dim=0)
         v_data = v_data.unsqueeze(dim=1)
         u_data = u_data.unsqueeze(dim=1)

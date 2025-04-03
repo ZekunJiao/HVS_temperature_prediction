@@ -5,7 +5,8 @@ from continuiti.trainer import Trainer
 from continuiti.trainer.callbacks import LearningCurve
 from continuiti.data.utility import split
 from dataset import OperatorTemperatureDataset
-
+from Callbacks import ModelCheckpointCallback, TensorBoardLogger
+import random 
 import os
 from datetime import datetime
 
@@ -15,42 +16,6 @@ import wandb
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 writer = SummaryWriter(f"runs/{timestamp}")
-
-# Initialize a wandb run with a project name and config
-
-# def train_model(model, train_loader, test_loader, criterion, optimizer, epochs, device):
-#     for epoch in range(epochs):
-#         model.train()
-#         running_loss = 0.0
-#         for inputs, targets in train_loader:
-#             inputs, targets = inputs.to(device), targets.to(device)
-#             optimizer.zero_grad()
-#             outputs = model(inputs)
-#             loss = criterion(outputs, targets)
-#             loss.backward()
-#             optimizer.step()
-#             for name, param in model.named_parameters():
-#                 writer.add_histogram(f'Weights/{name}', param, epoch)
-#                 if param.grad is not None:
-#                     writer.add_histogram(f'Gradients/{name}', param.grad, epoch)
-#             running_loss += loss.item() * inputs.size(0)
-#         train_loss = running_loss / len(train_loader.dataset)
-
-#         model.eval()
-#         test_loss = 0.0
-#         with torch.no_grad():
-#             for inputs, targets in test_loader:
-#                 inputs, targets = inputs.to(device), targets.to(device)
-#                 outputs = model(inputs)
-#                 loss = criterion(outputs, targets)
-#                 test_loss += loss.item() * inputs.size(0)
-#         test_loss /= len(test_loader.dataset)
-
-#         # Log losses to TensorBoard
-#         writer.add_scalar("Loss/Train", train_loss, epoch)
-#         writer.add_scalar("Loss/Test", test_loss, epoch)
-
-#         print(f"Epoch {epoch+1}/{epochs}, Train Loss: {train_loss:.6f}, Test Loss: {test_loss:.6f}")
 
 
 def visualize_predictions(operator, test_dataset, num_samples, writer, device='cpu', save_folder="result",  filename=None):
@@ -72,15 +37,10 @@ def visualize_predictions(operator, test_dataset, num_samples, writer, device='c
         x = x.to(device).unsqueeze(0)
         u = u.to(device).unsqueeze(0)
         y_field = y_field.to(device).unsqueeze(0)
-        print(x.shape)
-        print(u.shape)
-        print(y_field.shape)
-        print(y.shape)
 
         with torch.no_grad():
             prediction = operator(x, u, y_field).cpu().squeeze()
         
-        print(prediction.shape)
         # Select row of subplots
 
         x = x.cpu().squeeze(0).numpy()
@@ -88,27 +48,108 @@ def visualize_predictions(operator, test_dataset, num_samples, writer, device='c
 
         ax1.set_title("Partial Input")
         im1 = ax1.scatter(x[0,:], x[1,:], s=3)
+        ax1.set_xlim(0, 1)
+        ax1.set_ylim(0, 1)
         ax1.set_aspect("equal")
         fig.colorbar(im1, ax=ax1)
 
         ax2.set_title("Ground Truth")
         im2 = ax2.imshow(v.squeeze().cpu().numpy(), cmap='viridis', origin="lower")
         ax2.set_aspect("equal")
+        ax2.set_xlim(0, 99)
+        ax2.set_ylim(0, 99)
         fig.colorbar(im2, ax=ax2)
 
         ax3.set_title("Prediction")
         im3 = ax3.imshow(prediction, cmap='viridis', origin="lower")
         ax3.set_aspect("equal")
+        ax3.set_xlim(0, 99)
+        ax3.set_ylim(0, 99)
         fig.colorbar(im3, ax=ax3)
 
     plt.tight_layout()
 
+    # Save to file
     save_path = os.path.join(save_folder, filename)
     plt.savefig(save_path)
     print(f"Figure saved to {save_path}")
+    
+    # Log figure to TensorBoard
+    if writer is not None:
+        writer.add_figure('Predictions', fig, close=False)
+        print("Figure added to TensorBoard")
+    
     plt.show()
 
-
+def visualize_dataset(dataset, n=1):
+    """
+    Visualize n samples from the dataset for a sanity check.
+    
+    For each sample, two subplots are shown in one row:
+      - Left: Observed input (x) as a scatter plot.
+      - Right: Full temperature field (v) as a heatmap.
+    
+    Args:
+        dataset: The dataset instance which is expected to have attributes x and v.
+                 - x: Observed coordinate input of shape (num_samples, 2, num_observed)
+                 - v: Full field values, shape (num_samples, 1, H, W)
+        n (int): Number of samples to visualize, randomly sampled from the dataset.
+    """
+    # Randomly sample n unique indices from the dataset
+    indices = random.sample(range(len(dataset)), n)
+    
+    n_samples = len(indices)
+    n_cols = 2  # one column for x (observed points) and one for v (full field)
+    
+    # Create a figure with one row per sample
+    fig, axes = plt.subplots(n_samples, n_cols, figsize=(6 * n_cols, 4 * n_samples))
+    
+    # If only one sample is provided, ensure axes is 2D for consistency
+    if n_samples == 1:
+        axes = axes.reshape(1, -1)
+    
+    for i, idx in enumerate(indices):
+        # Extract sample data
+        x_sample = dataset.x[idx]  # shape: (2, num_observed)
+        v_sample = dataset.v[idx]  # shape: (1, H, W)
+        
+        # Remove channel dimension from v and get dimensions
+        v_field = v_sample.squeeze(0).cpu().numpy()  # shape: (H, W)
+        H, W = v_field.shape
+        
+        # Get observed coordinates from x_sample
+        x_coords = x_sample[0].cpu().numpy()  # column coordinates
+        y_coords = x_sample[1].cpu().numpy()  # row coordinates
+        
+        # If coordinates are normalized to [0, 1], scale them to image dimensions
+        if x_coords.max() <= 1.1 and y_coords.max() <= 1.1:
+            x_coords_plot = x_coords * (W - 1)
+            y_coords_plot = y_coords * (H - 1)
+        else:
+            x_coords_plot = x_coords
+            y_coords_plot = y_coords
+        
+        # --- Left subplot: Observed input (x) ---
+        ax_input = axes[i, 0]
+        ax_input.scatter(x_coords_plot, y_coords_plot, color='blue', s=3)
+        ax_input.set_xlim(0, W - 1)
+        ax_input.set_ylim(0, H - 1)
+        ax_input.set_aspect("equal")
+        ax_input.set_title(f"Sample {idx}: Observed Input")
+        ax_input.set_xlabel("X index")
+        ax_input.set_ylabel("Y index")
+        # Optionally, invert the y-axis to match image coordinate systems
+        
+        # --- Right subplot: Full temperature field (v) ---
+        ax_field = axes[i, 1]
+        im = ax_field.imshow(v_field, cmap='viridis', origin='lower')
+        ax_field.set_title(f"Sample {idx}: Full Temperature Field")
+        ax_field.set_xlabel("X index")
+        ax_field.set_ylabel("Y index")
+        fig.colorbar(im, ax=ax_field)
+    
+    plt.tight_layout()
+    plt.show()
 
 def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
@@ -124,17 +165,58 @@ def main():
         print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
         print(dataset.shapes)
 
-
+    # visualize_dataset(dataset, n=5)
     train_dataset, test_dataset = split(dataset, 0.8)
 
-    operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=8, device=device)
-    trainer = Trainer(operator, device=device)
+    # Define hyperparameters
+    trunk_depth = 8
     epochs = 2000
-    trainer.fit(train_dataset, test_dataset=train_dataset, callbacks=[LearningCurve()], epochs=epochs)
-    print("vizualizing")
+    
+    operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=trunk_depth, device=device)
 
-    visualize_predictions(operator, train_dataset, num_samples=10, writer=writer)
-    writer.close()
+    model_type = type(operator).__name__
+    # Collect hyperparameters in a dictionary
+    hparams = {
+        'trunk_depth': trunk_depth,
+        'epochs': epochs,
+        'dataset_size': len(dataset),
+        'model_type': model_type
+    }
+    
+    # Create TensorBoard logger
+    timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
+    log_dir = f"runs/{timestamp}"
+    tb_logger = TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams)
+
+    model_name = f"{model_type}_{timestamp}"
+
+    # Create the checkpoint callback with the optimizer
+    # model_path = os.path.join(script_dir, "saved_models", f"DeepCatOperator_04-02_22-28-41_final.pt")  # use your actual saved filename
+    # operator.load_state_dict(torch.load(model_path, map_location=device))
+    # operator.to(device)
+
+    trainer = Trainer(operator, device=device)
+
+    checkpoint_callback = ModelCheckpointCallback(
+        operator,
+        trainer.optimizer,
+        save_dir=os.path.join(script_dir, "saved_models"),
+        model_name=model_name,
+        save_interval=200
+    )
+    
+    trainer.fit(train_dataset, test_dataset=train_dataset, callbacks=[LearningCurve(), tb_logger, checkpoint_callback], epochs=epochs)
+
+    model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
+    os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
+    torch.save(operator.state_dict(), model_save_path)
+    print(f"Model saved to {model_save_path}")
+
+
+    # Create a new writer for visualizations using the same log directory
+    viz_writer = SummaryWriter(log_dir)
+    visualize_predictions(operator, train_dataset, num_samples=10, writer=viz_writer, device=device)
+    viz_writer.close()  # Close the visualization writer when done
 
 if __name__ == "__main__":
     main()

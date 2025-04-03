@@ -1,4 +1,6 @@
-runs/
-result/
-datasets/
-wandb/
+
+runs/*
+result/*
+datasets/*
+wandb/*
+savemodels/*
