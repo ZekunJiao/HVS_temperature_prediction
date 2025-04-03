@@ -74,24 +74,22 @@ class ModelCheckpointCallback(Callback):
         operator (torch.nn.Module): The model to save.
         optimizer (torch.optim.Optimizer): The optimizer to save.
         save_dir (str): Directory where checkpoints will be saved.
-        model_name (str): Base name for the checkpoint files.
         save_interval (int): Save a checkpoint every `save_interval` epochs.
         scheduler (torch.optim.lr_scheduler._LRScheduler, optional):
             Learning rate scheduler to save. Defaults to None.
     """
-    def __init__(self, operator, optimizer, save_dir, model_name, save_interval=100, scheduler=None):
+    def __init__(self, operator, optimizer, save_dir, save_interval=100, scheduler=None):
         self.operator = operator
         self.optimizer = optimizer # Store the optimizer
         self.scheduler = scheduler # Store the scheduler (optional)
         self.save_dir = save_dir
         self.save_interval = save_interval
-        self.model_name = model_name
         os.makedirs(save_dir, exist_ok=True)
         print(f"Checkpoint callback initialized. Saving checkpoints to: {self.save_dir}")
         print(f"Save interval: {self.save_interval} epochs")
 
 
-    def __call__(self, logs:Logs):
+    def __call__(self, logs: Logs):
         """
         Saves a checkpoint at the end of an epoch if the interval condition is met.
 
@@ -109,11 +107,11 @@ class ModelCheckpointCallback(Callback):
         if (logs.epoch + 1) % self.save_interval == 0:
             checkpoint_path = os.path.join(
                 self.save_dir,
-                f"{self.model_name}_chkpt_ep{logs.epoch + 1}.pt" # Save using 1-based epoch number in filename
+                f"ep{logs.epoch + 1}.pt" # Save using 1-based epoch number in filename
             )
 
             checkpoint = {
-                'epoch': logs.epoch, # Save the epoch number (0-based usually)
+                'epoch': logs.epoch + 1, 
                 'model_state_dict': self.operator.state_dict(),
                 'optimizer_state_dict': self.optimizer.state_dict(),
             }

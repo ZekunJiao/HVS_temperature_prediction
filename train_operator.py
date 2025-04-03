@@ -18,7 +18,7 @@ timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 writer = SummaryWriter(f"runs/{timestamp}")
 
 
-def visualize_predictions(operator, test_dataset, num_samples, writer, device='cpu', save_folder="result",  filename=None):
+def visualize_predictions(operator, test_dataset, num_samples, device='cpu', save_folder="result", filename=None, log_dir=None):
     operator.eval()
     operator.to(device)
 
@@ -75,9 +75,11 @@ def visualize_predictions(operator, test_dataset, num_samples, writer, device='c
     print(f"Figure saved to {save_path}")
     
     # Log figure to TensorBoard
-    if writer is not None:
-        writer.add_figure('Predictions', fig, close=False)
+    if log_dir is not None:
+        viz_writer = SummaryWriter()
+        viz_writer.add_figure('Predictions', fig, close=False)
         print("Figure added to TensorBoard")
+        viz_writer.close()
     
     plt.show()
 
@@ -151,6 +153,7 @@ def visualize_dataset(dataset, n=1):
     plt.tight_layout()
     plt.show()
 
+
 def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
@@ -168,11 +171,22 @@ def main():
     # visualize_dataset(dataset, n=5)
     train_dataset, test_dataset = split(dataset, 0.8)
 
+
+    #### logging and saving ####
+
+    log_tensorboard = True
+    save_model = True
+
+    ############################
+
+
     # Define hyperparameters
     trunk_depth = 8
-    epochs = 2000
+    epochs = 5
     
     operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=trunk_depth, device=device)
+    total_params = sum(p.numel() for p in operator.parameters())
+    optimizer = torch.optim.Adam(operator.parameters(), lr=0.001)
 
     model_type = type(operator).__name__
     # Collect hyperparameters in a dictionary
@@ -180,43 +194,78 @@ def main():
         'trunk_depth': trunk_depth,
         'epochs': epochs,
         'dataset_size': len(dataset),
-        'model_type': model_type
+        'model_type': model_type,
+        'total_params': total_params
     }
     
     # Create TensorBoard logger
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
     log_dir = f"runs/{timestamp}"
-    tb_logger = TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams)
+
+    if log_tensorboard:
+        tb_logger = TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams) 
+    else:
+        tb_logger = None
 
     model_name = f"{model_type}_{timestamp}"
 
-    # Create the checkpoint callback with the optimizer
-    # model_path = os.path.join(script_dir, "saved_models", f"DeepCatOperator_04-02_22-28-41_final.pt")  # use your actual saved filename
-    # operator.load_state_dict(torch.load(model_path, map_location=device))
-    # operator.to(device)
+    scheduler = None
+    ##################### Uncomment for load model #######################
 
-    trainer = Trainer(operator, device=device)
+    checkpoint_path = os.path.join(script_dir, "saved_models", f"DeepCatOperator_04-03_10-01-12_final.pt")  # use your actual saved filename
+    checkpoint = torch.load(checkpoint_path, map_location=device)
 
-    checkpoint_callback = ModelCheckpointCallback(
-        operator,
-        trainer.optimizer,
-        save_dir=os.path.join(script_dir, "saved_models"),
-        model_name=model_name,
-        save_interval=200
-    )
+    print("checkpoint", checkpoint.keys())
+    operator.load_state_dict(checkpoint['model_state_dict'])
+    operator.to(device)  # Ensure the model is on the correct device
+
+    optimizer = torch.optim.Adam(operator.parameters(), lr=0.001)
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+    if 'scheduler_state_dict' in checkpoint:
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
+        scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    print("Operator and optimizer state loaded successfully.")
+
+    #######################################################################
+
+
+    # ################## Uncomment for train model #########################
+
+    # trainer = Trainer(operator=operator, optimizer=optimizer, device=device)
+
+    # if save_model:
+    #     checkpoint_callback = ModelCheckpointCallback(
+    #         operator,
+    #         trainer.optimizer,
+    #         save_dir=os.path.join(script_dir, "saved_models", model_name),
+    #         save_interval=250
+    #     ) 
+    # else:
+    #     None
     
-    trainer.fit(train_dataset, test_dataset=train_dataset, callbacks=[LearningCurve(), tb_logger, checkpoint_callback], epochs=epochs)
+    # scheduler = scheduler if scheduler is not None else True
 
-    model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
-    os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
-    torch.save(operator.state_dict(), model_save_path)
-    print(f"Model saved to {model_save_path}")
+    # trainer.fit(train_dataset, test_dataset=test_dataset, callbacks=[LearningCurve(), tb_logger, checkpoint_callback], lr_scheduler=scheduler, epochs=epochs)
+
+    # model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
+    # os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
+    # final_checkpoint = {
+    #     'epoch': epochs,  # or use the last completed epoch if different
+    #     'model_state_dict': operator.state_dict(),
+    #     'optimizer_state_dict': trainer.optimizer.state_dict(),
+    # }
+
+    # if trainer.scheduler is not None:
+    #     final_checkpoint['scheduler_state_dict'] = trainer.scheduler.state_dict()
+
+    # torch.save(final_checkpoint, model_save_path)
+    # print(f"Checkpoint saved to {model_save_path}")
+
+    # ######################################################################
 
 
-    # Create a new writer for visualizations using the same log directory
-    viz_writer = SummaryWriter(log_dir)
-    visualize_predictions(operator, train_dataset, num_samples=10, writer=viz_writer, device=device)
-    viz_writer.close()  # Close the visualization writer when done
+    visualize_predictions(operator, train_dataset, num_samples=10, device=device, log_dir=log_dir)
 
 if __name__ == "__main__":
     main()
