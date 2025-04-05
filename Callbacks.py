@@ -50,18 +50,10 @@ class TensorBoardLogger(Callback):
 
     def on_train_end(self):
         # Now that we have final metrics, log hyperparameters with metrics
-        if self.hparams:
-            # Convert any non-compatible types to strings for TensorBoard
-            hparams_compatible = {}
-            for k, v in self.hparams.items():
-                if isinstance(v, (str, bool, int, float)):
-                    hparams_compatible[k] = v
-                else:
-                    hparams_compatible[k] = str(v)
-                    
-            self.writer.add_hparams(hparams_compatible, self.final_metrics)
-            print("[TensorBoardLogger] Logged hyperparameters with final metrics")
-            
+ 
+        self.writer.add_scalar("final/loss_train", self.final_metrics["hparam/train_loss"])
+        self.writer.add_scalar("final/loss_test", self.final_metrics["hparam/test_loss"])
+     
         self.writer.close()
         print("[TensorBoardLogger] Logging complete and closed.")
 

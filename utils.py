@@ -97,8 +97,9 @@ def create_operator_input(full_field, observed_fraction):
     col_indices = indices % W
 
     # Stack to form coordinates: first row is column indices, second row is row indices
-    col_indices_norm = col_indices.float() / (W - 1)
-    row_indices_norm = row_indices.float() / (W - 1)
+    norm_factor = max(H, W) - 1
+    col_indices_norm = col_indices.float() / norm_factor
+    row_indices_norm = row_indices.float() / norm_factor
 
     # Stack normalized coordinates: first row is normalized column indices, second row is normalized row indices
     x = torch.stack([col_indices_norm, row_indices_norm])  # Shape: (2, num_observed)

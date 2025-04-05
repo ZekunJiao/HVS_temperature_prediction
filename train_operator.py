@@ -1,6 +1,6 @@
 import torch
 import matplotlib.pyplot as plt
-from continuiti.operators import DeepCatOperator
+from continuiti.operators import DeepCatOperator, DeepONet
 from continuiti.trainer import Trainer
 from continuiti.trainer.callbacks import LearningCurve
 from continuiti.data.utility import split
@@ -10,12 +10,11 @@ import os
 from datetime import datetime
 
 from torch.utils.tensorboard import SummaryWriter
+from dataset import OperatorTemperatureDataset
 from continuiti.trainer.scheduler import LinearLRScheduler
 
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
-writer = SummaryWriter(f"runs/{timestamp}")
-
 
 def visualize_predictions(operator, test_dataset, num_samples, device='cpu', save_folder="result", filename=None, log_dir=None):
     operator.eval()
@@ -25,45 +24,45 @@ def visualize_predictions(operator, test_dataset, num_samples, device='cpu', sav
         timestamp = datetime.now().strftime("%m%d-%H%M%S")
         filename = f"{timestamp}.png"
 
+    num_samples = min(num_samples, len(test_dataset))
     fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
 
-    for i in range(min(num_samples, len(test_dataset))):
+    for i in range(num_samples):
         x, u, y, v = test_dataset[i] 
 
-        y_size = v.shape[1]
-        grid_x, grid_y = torch.meshgrid(torch.arange(0, y_size, dtype=torch.float32), torch.arange(0, y_size, dtype=torch.float32))
-        y_field = torch.stack([grid_x, grid_y])
+
         x = x.to(device).unsqueeze(0)
         u = u.to(device).unsqueeze(0)
-        y_field = y_field.to(device).unsqueeze(0)
+        y = y.to(device).unsqueeze(0)
 
         with torch.no_grad():
-            prediction = operator(x, u, y_field).cpu().squeeze()
+            prediction = operator(x, u, y).cpu().squeeze()
         
         # Select row of subplots
+        print("prediction shape", prediction.shape)
 
         x = x.cpu().squeeze(0).numpy()
+        u = u.squeeze().cpu().numpy()
+        y = y.squeeze().cpu().numpy()
+        prediction = prediction.squeeze().cpu().numpy()
+
         ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
         ax1.set_title("Partial Input")
-        im1 = ax1.scatter(x[0,:], x[1,:], s=3)
-        ax1.set_xlim(0, 1)
-        ax1.set_ylim(0, 1)
+        im1 = ax1.scatter(x[0,:], x[1,:], c=u, s=3)
+        ax1.set_xlim(0, 2)
+        ax1.set_ylim(0, 2)
         ax1.set_aspect("equal")
         fig.colorbar(im1, ax=ax1)
 
         ax2.set_title("Ground Truth")
-        im2 = ax2.imshow(v.squeeze().cpu().numpy(), cmap='viridis', origin="lower")
+        im2 = ax2.scatter(y[0], y[1], c=v, cmap='viridis')
         ax2.set_aspect("equal")
-        ax2.set_xlim(0, 99)
-        ax2.set_ylim(0, 99)
         fig.colorbar(im2, ax=ax2)
 
         ax3.set_title("Prediction")
-        im3 = ax3.imshow(prediction, cmap='viridis', origin="lower")
+        im3 = ax3.scatter(y[0], y[1], c=prediction, cmap='viridis')
         ax3.set_aspect("equal")
-        ax3.set_xlim(0, 99)
-        ax3.set_ylim(0, 99)
         fig.colorbar(im3, ax=ax3)
 
     plt.tight_layout()
@@ -75,7 +74,7 @@ def visualize_predictions(operator, test_dataset, num_samples, device='cpu', sav
     
     # Log figure to TensorBoard
     if log_dir is not None:
-        viz_writer = SummaryWriter()
+        viz_writer = SummaryWriter(log_dir=log_dir)
         viz_writer.add_figure('Predictions', fig, close=False)
         print("Figure added to TensorBoard")
         viz_writer.close()
@@ -97,10 +96,15 @@ def visualize_dataset(dataset, n=1):
         n (int): Number of samples to visualize, randomly sampled from the dataset.
     """
     # Randomly sample n unique indices from the dataset
+    n = min(n, len(dataset))
+    
+    if n <= 0:
+        raise ValueError("Number of samples to visualize must be positive")
+
     indices = random.sample(range(len(dataset)), n)
     
     n_samples = len(indices)
-    n_cols = 2  # one column for x (observed points) and one for v (full field)
+    n_cols = 3  # one column for x (observed points) and one for v (full field)
     
     # Create a figure with one row per sample
     fig, axes = plt.subplots(n_samples, n_cols, figsize=(6 * n_cols, 4 * n_samples))
@@ -111,30 +115,37 @@ def visualize_dataset(dataset, n=1):
     
     for i, idx in enumerate(indices):
         # Extract sample data
+        u_sample = dataset.u[idx]
         x_sample = dataset.x[idx]  # shape: (2, num_observed)
         v_sample = dataset.v[idx]  # shape: (1, H, W)
-        
+        y_sample = dataset.y[idx]  # shape: (1, H, W)
+        print("u shape", u_sample.shape)
+        print("x shape", x_sample.shape)
+        print("v shape", v_sample.shape)
+        print("y shape", y_sample.shape)
+
         # Remove channel dimension from v and get dimensions
         v_field = v_sample.squeeze(0).cpu().numpy()  # shape: (H, W)
-        H, W = v_field.shape
         
         # Get observed coordinates from x_sample
-        x_coords = x_sample[0].cpu().numpy()  # column coordinates
-        y_coords = x_sample[1].cpu().numpy()  # row coordinates
+        xx_coords = x_sample[0].cpu().numpy()  # column coordinates
+        xy_coords = x_sample[1].cpu().numpy()  # row coordinates
         
         # If coordinates are normalized to [0, 1], scale them to image dimensions
-        if x_coords.max() <= 1.1 and y_coords.max() <= 1.1:
-            x_coords_plot = x_coords * (W - 1)
-            y_coords_plot = y_coords * (H - 1)
-        else:
-            x_coords_plot = x_coords
-            y_coords_plot = y_coords
+
+
+        yx_coords = y_sample[0].cpu().numpy()  # column coordinates
+        yy_coords = y_sample[1].cpu().numpy()  # row coordinates
+
+        print("yx max", yx_coords.max(),"yy_cords_max", yy_coords.max())
+
+
         
         # --- Left subplot: Observed input (x) ---
         ax_input = axes[i, 0]
-        ax_input.scatter(x_coords_plot, y_coords_plot, color='blue', s=3)
-        ax_input.set_xlim(0, W - 1)
-        ax_input.set_ylim(0, H - 1)
+        ax_input.scatter(xx_coords, xy_coords, c=u_sample, cmap='viridis',s=0.5)
+        ax_input.set_xlim(0, 2)
+        ax_input.set_ylim(0, 2)
         ax_input.set_aspect("equal")
         ax_input.set_title(f"Sample {idx}: Observed Input")
         ax_input.set_xlabel("X index")
@@ -148,6 +159,15 @@ def visualize_dataset(dataset, n=1):
         ax_field.set_xlabel("X index")
         ax_field.set_ylabel("Y index")
         fig.colorbar(im, ax=ax_field)
+
+        ax_y_sample = axes[i, 2]
+        ax_y_sample.scatter(yx_coords, yy_coords, c=v_sample, cmap="viridis", s=0.1)
+        ax_y_sample.set_xlim(0, 2)
+        ax_y_sample.set_ylim(0, 2)
+        ax_y_sample.set_aspect("equal")
+        ax_y_sample.set_title(f"Sample {idx}: Scatter Plot of Y Sample")
+        ax_y_sample.set_xlabel("X index")
+        ax_y_sample.set_ylabel("Y index")
     
     plt.tight_layout()
     plt.show()
@@ -157,7 +177,7 @@ def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
-    data_file_name = "operator_dataset_1000.pt"
+    data_file_name = "operator_dataset_100.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -167,30 +187,30 @@ def main():
         print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
         print(dataset.shapes)
 
-    # visualize_dataset(dataset, n=5)
-    train_dataset, test_dataset = split(dataset, 0.8)
+    visualize_dataset(dataset, n=5)
 
+    if len(dataset) > 1:
+        train_dataset, test_dataset = split(dataset, 0.8)
+    else:
+        train_dataset = dataset
 
     #### logging and saving ####
-
     log_tensorboard = True
-    save_model = True
-
+    save_model = False
     ############################
 
 
     # Define hyperparameters
-    trunk_depth = 8
-    epochs = 5
+    epochs = 500
     
-    operator = DeepCatOperator(shapes=dataset.shapes, trunk_depth=trunk_depth, device=device)
+    operator = DeepCatOperator(shapes=dataset.shapes, device=device, trunk_depth=4, branch_depth=4)
     total_params = sum(p.numel() for p in operator.parameters())
-    optimizer = torch.optim.Adam(operator.parameters(), lr=0.001)
+    print("total param: ", total_params)
 
     model_type = type(operator).__name__
     # Collect hyperparameters in a dictionary
     hparams = {
-        'trunk_depth': trunk_depth,
+        'trunk_depth': "",
         'epochs': epochs,
         'dataset_size': len(dataset),
         'model_type': model_type,
@@ -201,14 +221,15 @@ def main():
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
     log_dir = f"runs/{timestamp}"
 
+
+    callback_list = [LearningCurve()]
+
     if log_tensorboard:
-        tb_logger = TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams) 
-    else:
-        tb_logger = None
+        callback_list.append(TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams))
 
     model_name = f"{model_type}_{timestamp}"
 
-    scheduler = LinearLRScheduler(optimizer=optimizer, max_epochs=epochs)
+
     ##################### Uncomment for load model #######################
 
     # checkpoint_path = os.path.join(script_dir, "saved_models", f"DeepCatOperator_04-03_10-01-12_final.pt")  # use your actual saved filename
@@ -231,37 +252,37 @@ def main():
 
     # ################## Uncomment for train model #########################
 
-    trainer = Trainer(operator=operator, optimizer=optimizer, device=device)
+    trainer = Trainer(operator=operator, device=device)
 
-    if save_model:
-        checkpoint_callback = ModelCheckpointCallback(
-            operator,
-            trainer.optimizer,
-            save_dir=os.path.join(script_dir, "saved_models", model_name),
-            save_interval=250,
-            scheduler=scheduler
-        ) 
-    else:
-        None
+    # if save_model:
+    #     checkpoint_callback = ModelCheckpointCallback(
+    #         operator,
+    #         trainer.optimizer,
+    #         save_dir=os.path.join(script_dir, "saved_models", model_name),
+    #         save_interval=250,
+    #         # scheduler=scheduler
+    #     ) 
+    #     callback_list.append(save_model)
     
-    trainer.fit(train_dataset, test_dataset=test_dataset, callbacks=[LearningCurve(), tb_logger, checkpoint_callback], lr_scheduler=scheduler, epochs=epochs)
+    trainer.fit(train_dataset, test_dataset=test_dataset, callbacks=callback_list, epochs=epochs)
+    
+    # if save_model:
+    #     model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
+    #     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
+    #     final_checkpoint = {
+    #         'epoch': epochs,  # or use the last completed epoch if different
+    #         'model_state_dict': operator.state_dict(),
+    #         'optimizer_state_dict': trainer.optimizer.state_dict(),
+    #     }
 
-    model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
-    os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
-    final_checkpoint = {
-        'epoch': epochs,  # or use the last completed epoch if different
-        'model_state_dict': operator.state_dict(),
-        'optimizer_state_dict': trainer.optimizer.state_dict(),
-    }
+    #     # final_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
 
-    final_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
-
-    torch.save(final_checkpoint, model_save_path)
-    print(f"Checkpoint saved to {model_save_path}")
+    #     torch.save(final_checkpoint, model_save_path)
+    #     print(f"Checkpoint saved to {model_save_path}")
 
     # ######################################################################
 
-    visualize_predictions(operator, train_dataset, num_samples=10, device=device, log_dir=log_dir)
+    visualize_predictions(operator, test_dataset, num_samples=10, device=device, log_dir=log_dir)
 
 if __name__ == "__main__":
     main()
