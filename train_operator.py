@@ -75,7 +75,7 @@ def visualize_predictions(operator, test_dataset, num_samples, device='cpu', sav
     # Log figure to TensorBoard
     if log_dir is not None:
         viz_writer = SummaryWriter(log_dir=log_dir)
-        viz_writer.add_figure('Predictions', fig, close=False)
+        viz_writer.add_figure(f'Predictions_{len(test_dataset)}', fig, close=False)
         print("Figure added to TensorBoard")
         viz_writer.close()
     
@@ -177,7 +177,8 @@ def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
-    data_file_name = "operator_dataset_100.pt"
+
+    data_file_name = "operator_dataset_1000.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -187,7 +188,7 @@ def main():
         print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
         print(dataset.shapes)
 
-    visualize_dataset(dataset, n=5)
+    # visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -201,9 +202,9 @@ def main():
 
 
     # Define hyperparameters
-    epochs = 500
+    epochs = 1000
     
-    operator = DeepCatOperator(shapes=dataset.shapes, device=device, trunk_depth=4, branch_depth=4)
+    operator = DeepCatOperator(shapes=dataset.shapes, device=device, trunk_depth=2, branch_depth=2, trunk_width=16, branch_width=16)
     total_params = sum(p.numel() for p in operator.parameters())
     print("total param: ", total_params)
 
@@ -282,7 +283,9 @@ def main():
 
     # ######################################################################
 
+    visualize_predictions(operator, train_dataset, num_samples=10, device=device, log_dir=log_dir)
     visualize_predictions(operator, test_dataset, num_samples=10, device=device, log_dir=log_dir)
+
 
 if __name__ == "__main__":
     main()

@@ -6,7 +6,7 @@ import os
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 
-def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.00, device='cpu'):
+def initialize_simulation(nx, ny, dx, dy, noise_amplitude=0.00, device='cpu'):
     """Generate a simulation with a randomized Gaussian initial condition and noise on GPU."""
     # Define grid coordinates
     x = torch.linspace(0, (nx-1)*dx, nx, device=device)
@@ -36,16 +36,16 @@ def generate_simulation(nx, ny, dx, dy, noise_amplitude=0.00, device='cpu'):
     segment_size = 2
     num_segments_x = nx // segment_size
     num_segments_y = ny // segment_size
-    noise_segment = noise_amplitude * torch.randn(num_segments_x, num_segments_y, device=device)
-    
-    # Upsample the noise
-    noise = noise_segment.repeat_interleave(segment_size, dim=0).repeat_interleave(segment_size, dim=1)
 
-    # Combine initial condition with noise (all on GPU)
-    initial_with_noise = initial_condition + noise
-    return initial_with_noise
+    if noise_amplitude > 0.0:
+        # create and add noise if amplitude is greater than 0
+        noise_segment = noise_amplitude * torch.randn(num_segments_x, num_segments_y, device=device)
+        noise = noise_segment.repeat_interleave(segment_size, dim=0).repeat_interleave(segment_size, dim=1)
+        initial_condition = initial_condition + noise
+        
+    return initial_condition
 
-def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude=0.00, device='cpu'):
+def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device='cpu'):
     """
     Simulates the heat equation using RK4, fully utilizing CUDA.
     Returns a tensor T of shape (nt, nx, ny) stored on `device`.
@@ -54,7 +54,7 @@ def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude=0.00, device='cp
     T = torch.empty(nt, nx, ny, device=device)
 
     # Initialize first time step
-    T[0] = generate_simulation(nx, ny, dx, dy, noise_amplitude, device=device)
+    T[0] = initialize_simulation(nx, ny, dx, dy, noise_amplitude, device=device)
 
     # Define the diffusion coefficient (D) on GPU
     D = torch.ones_like(T[0], device=device) * 0.3
@@ -87,8 +87,10 @@ def visualize_simulation(T, timesteps=[0, 10, 50, -1], device='cpu'):
     plt.tight_layout()
     plt.show()
 
-
 if __name__ == "__main__":
+    '''
+    Just for testing if simulation is correct
+    '''
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     # Simulation parameters
@@ -98,7 +100,7 @@ if __name__ == "__main__":
     nt = 800  # Number of time steps     # Time step size
 
     # Run the simulation
-    T = simulate_simulation(nx, ny, dx, dy, nt=nt, dt=dt, device=device)
+    T = simulate_simulation(nx, ny, dx, dy, nt=nt, dt=dt, noise_amplitude=0, device=device)
     vmin = torch.min(T).cpu().item()
     vmax = torch.max(T).cpu().item()
 

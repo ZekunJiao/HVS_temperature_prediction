@@ -183,23 +183,29 @@ class OperatorTemperatureDataset(OperatorDataset):
             # Exclude the initial condition (t=0) and add remaining snapshots
             rand_timeframe = random.randint(1, nt - 1)
 
-            v = T_series[nt - 1].cpu()
+            ## min max scale 
 
-            # fig, axs = plt.subplots(1, 3, figsize=(18,6))
-            # im = axs[0].imshow(v, cmap="viridis", origin="lower")
-            # fig.colorbar(im, ax=axs[0], label="Temperature")
-            # axs[0].set_title("Temperature Field at Final Time")
-            # axs[0].set_xlabel("X index")
-            # axs[0].set_ylabel("Y index")
+            v = T_series[nt - 1].cpu()
+            v = (v - torch.min(v)) / (torch.max(v) - torch.min(v))
+
+            fig, axs = plt.subplots(1, 3, figsize=(22,6))
+            
             
             x, u = create_operator_input(v, observed_fraction=0.02)
             grid_x, grid_y = torch.meshgrid(torch.arange(0, len(v), dtype=torch.float32), torch.arange(0, len(v[0]), dtype=torch.float32))
             
             # Normalize the grid coordinates to [0,1]
             norm_factor = max(nx, ny) -1
-            grid_x = grid_x / norm_factor
-            grid_y = grid_y / norm_factor
+            grid_x = grid_x / (nx - 1)
+            grid_y = grid_y / (ny - 1)
             y = torch.stack([grid_y, grid_x])
+
+            ####### plotting ##########
+            # im = axs[0].imshow(v, cmap="viridis", origin="lower")
+            # fig.colorbar(im, ax=axs[0], label="Temperature")
+            # axs[0].set_title("Temperature Field at Final Time")
+            # axs[0].set_xlabel("X index")
+            # axs[0].set_ylabel("Y index")
 
             # axs[1].scatter(x[0], x[1], c=u, cmap="viridis", s=1)
             # axs[1].set_xlim(0, 2)
@@ -208,7 +214,6 @@ class OperatorTemperatureDataset(OperatorDataset):
             # axs[2].scatter(y[0], y[1], c=v, cmap="viridis", s=1)
             # axs[2].set_xlim(0, 2)
             # axs[2].set_ylim(0, 2)
-
             # plt.show()
 
             x_data.append(x)
@@ -241,15 +246,16 @@ class OperatorTemperatureDataset(OperatorDataset):
         
 
 if __name__ == "__main__": 
-    print("################")
-
+    '''
+    Generate dataset here
+    '''
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
     nx, ny = 150, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 100
-    save_path = os.path.join(script_dir, "datasets", f"operator_dataset_{num_simulations}.pt")
+    num_simulations = 500
+    save_path = os.path.join(script_dir, "datasets", f"operator_dataset_{num_simulations}_nomalized.pt")
 
     print(save_path)
     if not os.path.exists(os.path.dirname(save_path)):

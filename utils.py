@@ -86,11 +86,12 @@ def create_operator_input(full_field, observed_fraction):
 
     # Restrict to the top half of the field
     H_sample = H // 2
-    num_points_restricted = H_sample * W
-    num_observed = int(observed_fraction * num_points_restricted)
+    max_index = H_sample * W
+    num_observed = int(observed_fraction * max_index)
 
-    # Generate random flat indices from 0 to num_points_restricted - 1
-    indices = torch.randperm(num_points_restricted, device=device)[:num_observed]
+    # Generate random flat indices from 0 to num_points_restricted - 1 (min=0, max=num_point_observed)
+    # Take only the observed fraction
+    indices = torch.randperm(max_index, device=device)[:num_observed]
 
     # Convert flat indices to 2D coordinates (row, col)
     row_indices = indices // W   # row index in range [0, H_sample)
@@ -98,8 +99,8 @@ def create_operator_input(full_field, observed_fraction):
 
     # Stack to form coordinates: first row is column indices, second row is row indices
     norm_factor = max(H, W) - 1
-    col_indices_norm = col_indices.float() / norm_factor
-    row_indices_norm = row_indices.float() / norm_factor
+    col_indices_norm = col_indices.float() / (W - 1)
+    row_indices_norm = row_indices.float() / (H - 1)
 
     # Stack normalized coordinates: first row is normalized column indices, second row is normalized row indices
     x = torch.stack([col_indices_norm, row_indices_norm])  # Shape: (2, num_observed)
