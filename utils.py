@@ -85,7 +85,7 @@ def create_operator_input(full_field, observed_fraction):
     H, W = full_field.shape
 
     # Restrict to the top half of the field
-    H_sample = H // 2
+    H_sample = H
     max_index = H_sample * W
     num_observed = int(observed_fraction * max_index)
 

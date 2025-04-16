@@ -16,7 +16,7 @@ from continuiti.trainer.scheduler import LinearLRScheduler
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 
-def visualize_predictions(operator, test_dataset, num_samples, device='cpu', save_folder="result", filename=None, log_dir=None):
+def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu', save_folder="result", filename=None, log_dir=None):
     operator.eval()
     operator.to(device)
 
@@ -46,12 +46,15 @@ def visualize_predictions(operator, test_dataset, num_samples, device='cpu', sav
         y = y.squeeze().cpu().numpy()
         prediction = prediction.squeeze().cpu().numpy()
 
+        x_min = y[0].min()
+        x_max = y[0].max()
+        y:min
         ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
         ax1.set_title("Partial Input")
         im1 = ax1.scatter(x[0,:], x[1,:], c=u, s=3)
-        ax1.set_xlim(0, 2)
-        ax1.set_ylim(0, 2)
+        ax1.set_xlim(y[0].min(), y[0].max())
+        ax1.set_ylim(y[1].min(), y[1].max())
         ax1.set_aspect("equal")
         fig.colorbar(im1, ax=ax1)
 
@@ -75,11 +78,11 @@ def visualize_predictions(operator, test_dataset, num_samples, device='cpu', sav
     # Log figure to TensorBoard
     if log_dir is not None:
         viz_writer = SummaryWriter(log_dir=log_dir)
-        viz_writer.add_figure(f'Predictions_{len(test_dataset)}', fig, close=False)
+        viz_writer.add_figure(f'{mode}_predictions_{len(test_dataset)}', fig, close=False)
         print("Figure added to TensorBoard")
         viz_writer.close()
     
-    plt.show()
+    # plt.show()
 
 def visualize_dataset(dataset, n=1):
     """
@@ -144,8 +147,8 @@ def visualize_dataset(dataset, n=1):
         # --- Left subplot: Observed input (x) ---
         ax_input = axes[i, 0]
         ax_input.scatter(xx_coords, xy_coords, c=u_sample, cmap='viridis',s=0.5)
-        ax_input.set_xlim(0, 2)
-        ax_input.set_ylim(0, 2)
+        ax_input.set_xlim(yx_coords.min(), yx_coords.max())
+        ax_input.set_ylim(yy_coords.min(), yy_coords.max())
         ax_input.set_aspect("equal")
         ax_input.set_title(f"Sample {idx}: Observed Input")
         ax_input.set_xlabel("X index")
@@ -162,8 +165,6 @@ def visualize_dataset(dataset, n=1):
 
         ax_y_sample = axes[i, 2]
         ax_y_sample.scatter(yx_coords, yy_coords, c=v_sample, cmap="viridis", s=0.1)
-        ax_y_sample.set_xlim(0, 2)
-        ax_y_sample.set_ylim(0, 2)
         ax_y_sample.set_aspect("equal")
         ax_y_sample.set_title(f"Sample {idx}: Scatter Plot of Y Sample")
         ax_y_sample.set_xlabel("X index")
@@ -178,7 +179,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    data_file_name = "operator_dataset_1000.pt"
+    data_file_name = "operator_dataset_500_observed0.02_nomalized_full.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -203,21 +204,37 @@ def main():
 
     # Define hyperparameters
     epochs = 1000
-    
-    operator = DeepCatOperator(shapes=dataset.shapes, device=device, trunk_depth=2, branch_depth=2, trunk_width=16, branch_width=16)
+    trunk_depth = 8
+    branch_depth = 8
+    trunk_width = 32
+    branch_width = 32
+
+    # Instantiate the operator using those variables
+    operator = DeepCatOperator(
+        shapes=dataset.shapes, 
+        device=device, 
+        trunk_depth=trunk_depth, 
+        branch_depth=branch_depth, 
+        trunk_width=trunk_width, 
+        branch_width=branch_width
+    )
+
+    # Count parameters
     total_params = sum(p.numel() for p in operator.parameters())
     print("total param: ", total_params)
 
-    model_type = type(operator).__name__
-    # Collect hyperparameters in a dictionary
+    # Create hyperparameter dict
     hparams = {
-        'trunk_depth': "",
+        'trunk_depth': trunk_depth,
+        'branch_depth': branch_depth,
+        'trunk_width': trunk_width,
+        'branch_width': branch_width,
         'epochs': epochs,
         'dataset_size': len(dataset),
-        'model_type': model_type,
-        'total_params': total_params
+        'model_type': type(operator).__name__,
+        'total_params': total_params,
+        'dataset_name': data_file_name
     }
-    
     # Create TensorBoard logger
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
     log_dir = f"runs/{timestamp}"
@@ -228,7 +245,7 @@ def main():
     if log_tensorboard:
         callback_list.append(TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams))
 
-    model_name = f"{model_type}_{timestamp}"
+    model_name = f"{type(operator).__name__}_{timestamp}"
 
 
     ##################### Uncomment for load model #######################
@@ -283,8 +300,8 @@ def main():
 
     # ######################################################################
 
-    visualize_predictions(operator, train_dataset, num_samples=10, device=device, log_dir=log_dir)
-    visualize_predictions(operator, test_dataset, num_samples=10, device=device, log_dir=log_dir)
+    visualize_predictions(operator, train_dataset, num_samples=10, mode="train", device=device, log_dir=log_dir)
+    visualize_predictions(operator, test_dataset, num_samples=10, mode="test", device=device, log_dir=log_dir)
 
 
 if __name__ == "__main__":

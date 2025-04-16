@@ -167,7 +167,7 @@ class OperatorDataset(td.Dataset):
 
 
 class OperatorTemperatureDataset(OperatorDataset):
-    def __init__(self, num_simulations, nx, ny, dx, dy, nt, dt, noise_amplitude, save_path=None):
+    def __init__(self, num_simulations, nx, ny, dx, dy, nt, dt, noise_amplitude,observed_fraction, save_path=None):
         # We'll store snapshots from time steps t = 1, 2, ..., nt-1 for each simulation
         x_data = []
         u_data = []
@@ -191,7 +191,7 @@ class OperatorTemperatureDataset(OperatorDataset):
             fig, axs = plt.subplots(1, 3, figsize=(22,6))
             
             
-            x, u = create_operator_input(v, observed_fraction=0.02)
+            x, u = create_operator_input(v, observed_fraction=observed_fraction)
             grid_x, grid_y = torch.meshgrid(torch.arange(0, len(v), dtype=torch.float32), torch.arange(0, len(v[0]), dtype=torch.float32))
             
             # Normalize the grid coordinates to [0,1]
@@ -200,7 +200,7 @@ class OperatorTemperatureDataset(OperatorDataset):
             grid_y = grid_y / (ny - 1)
             y = torch.stack([grid_y, grid_x])
 
-            ####### plotting ##########
+            # ######### plotting ##########
             # im = axs[0].imshow(v, cmap="viridis", origin="lower")
             # fig.colorbar(im, ax=axs[0], label="Temperature")
             # axs[0].set_title("Temperature Field at Final Time")
@@ -215,6 +215,7 @@ class OperatorTemperatureDataset(OperatorDataset):
             # axs[2].set_xlim(0, 2)
             # axs[2].set_ylim(0, 2)
             # plt.show()
+            # ########plotting ends ##########
 
             x_data.append(x)
             y_data.append(y)
@@ -252,10 +253,11 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    nx, ny = 150, 100
-    dx, dy = 0.01, 0.01
+    nx, ny = 20, 20
+    dx, dy = 0.05, 0.05
     num_simulations = 500
-    save_path = os.path.join(script_dir, "datasets", f"operator_dataset_{num_simulations}_nomalized.pt")
+    observed_fraction = 0.1
+    save_path = os.path.join(script_dir, "datasets", f"operator_dataset_{num_simulations}_observed{observed_fraction}_nx{nx}_ny{ny}_nomalized_full.pt")
 
     print(save_path)
     if not os.path.exists(os.path.dirname(save_path)):
@@ -263,6 +265,6 @@ if __name__ == "__main__":
         exit()
 
     print(num_simulations)
-    dataset = OperatorTemperatureDataset(num_simulations, nx, ny, dx, dy, nt=300, dt=0.0001, noise_amplitude=0, save_path=save_path)
+    dataset = OperatorTemperatureDataset(num_simulations, nx, ny, dx, dy, nt=300, dt=0.0001, observed_fraction=observed_fraction, noise_amplitude=0, save_path=save_path)
 
     print(f"Dataset size: {len(dataset)} samples")
