@@ -32,6 +32,7 @@ cycler @ file:///tmp/build/80754af9/cycler_1637851556182/work
 databricks-sdk==0.46.0
 debugpy @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/debugpy_1699554994633/work
 decorator @ file:///home/conda/feedstock_root/build_artifacts/decorator_1733236420667/work
+DeepXDE==1.13.2
 defusedxml==0.7.1
 Deprecated==1.2.18
 docker==7.1.0
@@ -135,6 +136,7 @@ protobuf==5.29.3
 psutil @ file:///C:/Users/dev-admin/perseverance-python-buildout/croot/psutil_1699482842340/work
 psycopg2 @ file:///C:/b/abs_3ei4rka0ip/croot/psycopg2_1731693723700/work
 pure_eval @ file:///home/conda/feedstock_root/build_artifacts/pure_eval_1721585709575/work
+pyaml==25.1.0
 pyarrow==19.0.1
 pyasn1==0.6.1
 pyasn1_modules==0.4.1
@@ -162,6 +164,7 @@ rpds-py==0.22.1
 rsa==4.9
 s3transfer==0.10.4
 scikit-learn @ file:///C:/b/abs_aajc9f7v6r/croot/scikit-learn_1722067652693/work/dist/scikit_learn-1.5.1-cp312-cp312-win_amd64.whl#sha256=96ed6defb86c154d2ff360afdbf0c37c33c4c729d4a15c9d8ada0b70fd817816
+scikit-optimize==0.10.2
 scipy @ file:///C:/Users/dev-admin/cr_scipy-release/scipy_1731632527468/work/dist/scipy-1.14.1-cp312-cp312-win_amd64.whl#sha256=34653c6cd617d15590b20aad84b54b5f7f6ed8f683edeeadb2260696234ef19e
 seaborn @ file:///C:/b/abs_ca2mi1rgmn/croot/seaborn_1718303534355/work
 Send2Trash==1.8.3
