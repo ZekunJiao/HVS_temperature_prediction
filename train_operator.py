@@ -179,7 +179,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    data_file_name = "operator_dataset_500_observed0.02_nomalized_full.pt"
+    data_file_name = "operator_dataset_500_observed0.1_nx20_ny20_nomalized_full.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -189,7 +189,7 @@ def main():
         print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
         print(dataset.shapes)
 
-    # visualize_dataset(dataset, n=5)
+    visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -204,10 +204,10 @@ def main():
 
     # Define hyperparameters
     epochs = 1000
-    trunk_depth = 8
-    branch_depth = 8
-    trunk_width = 32
-    branch_width = 32
+    trunk_depth = 16
+    branch_depth = 16
+    trunk_width = 64
+    branch_width = 64
 
     # Instantiate the operator using those variables
     operator = DeepCatOperator(

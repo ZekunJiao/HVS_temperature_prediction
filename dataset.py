@@ -253,10 +253,10 @@ if __name__ == "__main__":
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    nx, ny = 20, 20
-    dx, dy = 0.05, 0.05
-    num_simulations = 500
-    observed_fraction = 0.1
+    nx, ny = 10, 10
+    dx, dy = 0.1, 0.1
+    num_simulations = 5000
+    observed_fraction = 0.5
     save_path = os.path.join(script_dir, "datasets", f"operator_dataset_{num_simulations}_observed{observed_fraction}_nx{nx}_ny{ny}_nomalized_full.pt")
 
     print(save_path)
