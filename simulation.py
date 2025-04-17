@@ -45,7 +45,7 @@ def initialize_simulation(nx, ny, dx, dy, noise_amplitude=0.00, device='cpu'):
         
     return initial_condition
 
-def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device='cpu'):
+def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude) -> torch.Tensor:
     """
     Simulates the heat equation using RK4, fully utilizing CUDA.
     Returns a tensor T of shape (nt, nx, ny) stored on `device`.

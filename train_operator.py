@@ -39,8 +39,6 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
             prediction = operator(x, u, y).cpu().squeeze()
         
         # Select row of subplots
-        print("prediction shape", prediction.shape)
-
         x = x.cpu().squeeze(0).numpy()
         u = u.squeeze().cpu().numpy()
         y = y.squeeze().cpu().numpy()
@@ -179,9 +177,10 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    data_file_name = "operator_dataset_500_observed0.02_nomalized_full.pt"
+    data_file_name = "operator_dataset_5000_observed0.5_nx10_ny10_nomalized_full.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device: ", torch.cuda.get_device_name(torch.cuda.current_device()))
 
     # Create dataset
     if os.path.exists(save_path):
@@ -204,10 +203,10 @@ def main():
 
     # Define hyperparameters
     epochs = 1000
-    trunk_depth = 8
-    branch_depth = 8
-    trunk_width = 32
-    branch_width = 32
+    trunk_depth = 16
+    branch_depth = 16
+    trunk_width = 64
+    branch_width = 64
 
     # Instantiate the operator using those variables
     operator = DeepCatOperator(
