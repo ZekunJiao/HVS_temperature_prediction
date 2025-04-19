@@ -8,10 +8,13 @@ from Callbacks import ModelCheckpointCallback, TensorBoardLogger
 import random 
 import os
 from datetime import datetime
+from torch.utils.data import DataLoader
 
 from torch.utils.tensorboard import SummaryWriter
-from dataset import OperatorTemperatureDataset
+from dataset import OperatorTemperatureDataset, OperatorInitMappingDataset
 from continuiti.trainer.scheduler import LinearLRScheduler
+from continuiti.trainer.callbacks import PrintTrainingLoss, Logs
+import math
 
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
@@ -22,7 +25,7 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
 
     if filename == None:
         timestamp = datetime.now().strftime("%m%d-%H%M%S")
-        filename = f"{timestamp}.png"
+        filename = f"{timestamp}_{mode}.png"
 
     num_samples = min(num_samples, len(test_dataset))
     fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
@@ -39,36 +42,36 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
             prediction = operator(x, u, y).cpu().squeeze()
         
         # Select row of subplots
-        print("prediction shape", prediction.shape)
-
-        x = x.cpu().squeeze(0).numpy()
-        u = u.squeeze().cpu().numpy()
-        y = y.squeeze().cpu().numpy()
+        x = x.squeeze().cpu()
+        u = u.squeeze().cpu()
+        y = y.squeeze().cpu()
+        v = v.squeeze().cpu()
         prediction = prediction.squeeze().cpu().numpy()
 
         x_min = y[0].min()
         x_max = y[0].max()
-        y:min
+        
         ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
-        ax1.set_title("Partial Input")
-        im1 = ax1.scatter(x[0,:], x[1,:], c=u, s=3)
+        ax1.set_title("Input")
+        im1 = ax1.scatter(x[0,:], x[1,:], c=u, cmap="viridis", vmin=0, vmax=1)
         ax1.set_xlim(y[0].min(), y[0].max())
         ax1.set_ylim(y[1].min(), y[1].max())
         ax1.set_aspect("equal")
         fig.colorbar(im1, ax=ax1)
 
         ax2.set_title("Ground Truth")
-        im2 = ax2.scatter(y[0], y[1], c=v, cmap='viridis')
+        im2 = ax2.scatter(y[0], y[1], c=v, cmap='viridis', vmin=0, vmax=1)
         ax2.set_aspect("equal")
         fig.colorbar(im2, ax=ax2)
 
         ax3.set_title("Prediction")
-        im3 = ax3.scatter(y[0], y[1], c=prediction, cmap='viridis')
+        im3 = ax3.scatter(y[0], y[1], c=prediction, cmap='viridis', vmin=0, vmax=1)
         ax3.set_aspect("equal")
         fig.colorbar(im3, ax=ax3)
 
     plt.tight_layout()
+    plt.title(f"{mode}")
 
     # Save to file
     save_path = os.path.join(save_folder, filename)
@@ -78,7 +81,7 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
     # Log figure to TensorBoard
     if log_dir is not None:
         viz_writer = SummaryWriter(log_dir=log_dir)
-        viz_writer.add_figure(f'{mode}_predictions_{len(test_dataset)}', fig, close=False)
+        viz_writer.add_figure(f'{mode}_{len(test_dataset)}', fig, close=False)
         print("Figure added to TensorBoard")
         viz_writer.close()
     
@@ -135,24 +138,20 @@ def visualize_dataset(dataset, n=1):
         xy_coords = x_sample[1].cpu().numpy()  # row coordinates
         
         # If coordinates are normalized to [0, 1], scale them to image dimensions
-
-
         yx_coords = y_sample[0].cpu().numpy()  # column coordinates
         yy_coords = y_sample[1].cpu().numpy()  # row coordinates
 
         print("yx max", yx_coords.max(),"yy_cords_max", yy_coords.max())
 
 
-        
         # --- Left subplot: Observed input (x) ---
         ax_input = axes[i, 0]
-        ax_input.scatter(xx_coords, xy_coords, c=u_sample, cmap='viridis',s=0.5)
-        ax_input.set_xlim(yx_coords.min(), yx_coords.max())
-        ax_input.set_ylim(yy_coords.min(), yy_coords.max())
+        scatter_1 = ax_input.scatter(xx_coords, xy_coords, c=u_sample.cpu(), cmap='viridis',s=10)
         ax_input.set_aspect("equal")
-        ax_input.set_title(f"Sample {idx}: Observed Input")
+        ax_input.set_title(f"Sample {idx}: U")
         ax_input.set_xlabel("X index")
         ax_input.set_ylabel("Y index")
+        fig.colorbar(scatter_1, ax=ax_input)
         # Optionally, invert the y-axis to match image coordinate systems
         
         # --- Right subplot: Full temperature field (v) ---
@@ -164,14 +163,21 @@ def visualize_dataset(dataset, n=1):
         fig.colorbar(im, ax=ax_field)
 
         ax_y_sample = axes[i, 2]
-        ax_y_sample.scatter(yx_coords, yy_coords, c=v_sample, cmap="viridis", s=0.1)
+        scatter_2 = ax_y_sample.scatter(yx_coords, yy_coords, c=v_sample.cpu(), cmap="viridis", s=10)
         ax_y_sample.set_aspect("equal")
-        ax_y_sample.set_title(f"Sample {idx}: Scatter Plot of Y Sample")
+        ax_y_sample.set_title(f"Sample {idx}: V")
         ax_y_sample.set_xlabel("X index")
         ax_y_sample.set_ylabel("Y index")
+
+        cbar2 = fig.colorbar(scatter_2, ax=axes[i,2])
+        cbar2.set_label("v")
     
     plt.tight_layout()
     plt.show()
+
+
+def train_one_epoch(current_epoch, tb_writer): 
+    pass
 
 
 def main():
@@ -179,9 +185,10 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    data_file_name = "operator_dataset_500_observed0.1_nx20_ny20_nomalized_full.pt"
+    data_file_name = "operator_init_n5000_observed0.9_nx20_ny20.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Device: ", torch.cuda.get_device_name(torch.cuda.current_device()))
 
     # Create dataset
     if os.path.exists(save_path):
@@ -189,7 +196,7 @@ def main():
         print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
         print(dataset.shapes)
 
-    visualize_dataset(dataset, n=5)
+    # visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -201,14 +208,14 @@ def main():
     save_model = False
     ############################
 
-
     # Define hyperparameters
-    epochs = 1000
-    trunk_depth = 16
-    branch_depth = 16
-    trunk_width = 64
-    branch_width = 64
-
+    epochs = 30
+    trunk_depth = 8
+    branch_depth = 8
+    trunk_width = 32
+    branch_width = 32
+    batch_size = 32
+    weight_decay = 0
     # Instantiate the operator using those variables
     operator = DeepCatOperator(
         shapes=dataset.shapes, 
@@ -218,6 +225,10 @@ def main():
         trunk_width=trunk_width, 
         branch_width=branch_width
     )
+
+    operator = operator.to(device)
+    optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3, weight_decay=weight_decay)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=3)
 
     # Count parameters
     total_params = sum(p.numel() for p in operator.parameters())
@@ -233,72 +244,78 @@ def main():
         'dataset_size': len(dataset),
         'model_type': type(operator).__name__,
         'total_params': total_params,
-        'dataset_name': data_file_name
+        'dataset_name': data_file_name,
+        'weight_decay': weight_decay,
+        'scheduler': scheduler.__class__.__name__
     }
+
     # Create TensorBoard logger
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
     log_dir = f"runs/{timestamp}"
+    writer = SummaryWriter(log_dir=log_dir)
 
+    train_loader = DataLoader(train_dataset, batch_size=batch_size)
+    val_loader = DataLoader(test_dataset, batch_size=batch_size)
+    optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
+    mse_loss = torch.nn.MSELoss()
 
-    callback_list = [LearningCurve()]
+    hparam_text = "\n".join(f"{key}: {value}" for key, value in hparams.items())   
 
     if log_tensorboard:
-        callback_list.append(TensorBoardLogger(log_dir=log_dir, log_weights=True, hparams=hparams))
+        writer.add_text("Hyperparameters", hparam_text)
 
-    model_name = f"{type(operator).__name__}_{timestamp}"
+    steps = math.ceil(len(train_dataset) / batch_size)
+    print_loss_callback = PrintTrainingLoss(epochs, steps)
+    # Training
+    for epoch in range(epochs):
+        loss_train = 0.0
+        operator.train()
+        
+        logs = Logs(epoch=epoch + 1, step=0, loss_train=None, loss_test=None)
+        for x, u, y, v in train_loader:
+            operator.zero_grad()
+            x = x.to(device)
+            u = u.to(device)
+            y = y.to(device)
+            v = v.to(device)
 
+            pred = operator(x, u, y)
+            pred = pred.reshape(pred.shape)
+            loss = mse_loss(pred, v)
+            loss.backward()
+            optimizer.step()
+            loss_train += loss.detach().item()
+            logs.step += 1
+            logs.loss_train = loss_train / logs.step
+            
+            print_loss_callback.step(logs)
 
-    ##################### Uncomment for load model #######################
+        loss_train /= len(train_loader)
 
-    # checkpoint_path = os.path.join(script_dir, "saved_models", f"DeepCatOperator_04-03_10-01-12_final.pt")  # use your actual saved filename
-    # checkpoint = torch.load(checkpoint_path, map_location=device)
+        print(epoch)
+        if log_tensorboard:
+            writer.add_scalar("Loss/Train", loss_train, epoch)
 
-    # print("checkpoint", checkpoint.keys())
-    # operator.load_state_dict(checkpoint['model_state_dict'])
-    # operator.to(device)  # Ensure the model is on the correct device
+        if test_dataset is not None:
+            operator.eval()
+            loss_eval = 0.0
+            with torch.no_grad():
+                for x, u, y, v in val_loader:
+                    x = x.to(device)
+                    u = u.to(device)
+                    y = y.to(device)
+                    v = v.to(device)
+                    pred = operator(x, u, y)
+                    pred = pred.reshape(v.shape)
+                    loss = mse_loss(pred, y)
+                    loss_eval += loss.detach().item()
 
-    # optimizer = torch.optim.Adam(operator.parameters(), lr=0.001)
-    # optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            loss_eval /= len(val_loader)
+            logs.loss_test = loss_eval
+            print_loss_callback(logs)
 
-    # if 'scheduler_state_dict' in checkpoint:
-    #     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.1)
-    #     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-    # print("Operator and optimizer state loaded successfully.")
-
-    #######################################################################
-
-
-    # ################## Uncomment for train model #########################
-
-    trainer = Trainer(operator=operator, device=device)
-
-    # if save_model:
-    #     checkpoint_callback = ModelCheckpointCallback(
-    #         operator,
-    #         trainer.optimizer,
-    #         save_dir=os.path.join(script_dir, "saved_models", model_name),
-    #         save_interval=250,
-    #         # scheduler=scheduler
-    #     ) 
-    #     callback_list.append(save_model)
-    
-    trainer.fit(train_dataset, test_dataset=test_dataset, callbacks=callback_list, epochs=epochs)
-    
-    # if save_model:
-    #     model_save_path = os.path.join(script_dir, "saved_models", f"{model_name}_final.pt")
-    #     os.makedirs(os.path.dirname(model_save_path), exist_ok=True)
-    #     final_checkpoint = {
-    #         'epoch': epochs,  # or use the last completed epoch if different
-    #         'model_state_dict': operator.state_dict(),
-    #         'optimizer_state_dict': trainer.optimizer.state_dict(),
-    #     }
-
-    #     # final_checkpoint['scheduler_state_dict'] = scheduler.state_dict()
-
-    #     torch.save(final_checkpoint, model_save_path)
-    #     print(f"Checkpoint saved to {model_save_path}")
-
-    # ######################################################################
+            if log_tensorboard:
+                writer.add_scalar("Loss/Eval", loss_eval, epoch)
 
     visualize_predictions(operator, train_dataset, num_samples=10, mode="train", device=device, log_dir=log_dir)
     visualize_predictions(operator, test_dataset, num_samples=10, mode="test", device=device, log_dir=log_dir)

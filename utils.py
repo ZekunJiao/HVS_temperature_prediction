@@ -68,7 +68,7 @@ def create_operator_input_2(full_field, observed_fraction):
 
     return x, u
 
-def create_operator_input(full_field, observed_fraction):
+def create_operator_input(full_field, observed_fraction, domain_fraction):
     """
     Create a partial input for an operator by randomly sampling a fraction of points
     from the top half of a 2D tensor (full_field of shape (H, W)).
@@ -85,7 +85,7 @@ def create_operator_input(full_field, observed_fraction):
     H, W = full_field.shape
 
     # Restrict to the top half of the field
-    H_sample = H
+    H_sample = (H * domain_fraction)
     max_index = H_sample * W
     num_observed = int(observed_fraction * max_index)
 
@@ -107,6 +107,7 @@ def create_operator_input(full_field, observed_fraction):
 
     # Extract observed values from the top half of the field
     u = full_field[:H_sample, :].view(-1)[indices]
+    
 
     return x, u
 

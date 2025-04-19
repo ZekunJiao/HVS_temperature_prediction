@@ -4,3 +4,4 @@ result/*
 datasets/*
 wandb/*
 saved_models/*
+temp/*

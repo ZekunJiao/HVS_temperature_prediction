@@ -15,22 +15,12 @@ class TensorBoardLogger(Callback):
         self.final_metrics = {}  # Store final metrics for hparams
         super().__init__()
 
-    def on_train_begin(self):
-        print("[TensorBoardLogger] Logging started.")
-        self.writer.add_text("info", "Training started with Continuiti", 0)
-        
+    def on_train_begin(self):        
         # Also log hyperparameters as text for easy reading
         if self.hparams:
             hparam_text = "\n".join([f"{k}: {v}" for k, v in self.hparams.items()])
             self.writer.add_text("hyperparameters", hparam_text)
             
-            # Log individual hyperparameters as scalars for better tracking
-            for name, value in self.hparams.items():
-                if isinstance(value, (int, float)):
-                    self.writer.add_scalar(f"hyperparameters/{name}", value)
-                    
-            print(f"[TensorBoardLogger] Logged {len(self.hparams)} hyperparameters as text")
-            # Note: add_hparams will be called at the end of training when we have metrics
 
     def __call__(self, logs: Logs):
         self.writer.add_scalar("Loss/train", logs.loss_train, logs.epoch)
