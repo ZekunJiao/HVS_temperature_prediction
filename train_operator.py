@@ -228,7 +228,7 @@ def main():
 
     operator = operator.to(device)
     optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3, weight_decay=weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min", patience=3)
+    scheduler = LinearLRScheduler(optimizer=optimizer, max_epochs=epochs)
 
     # Count parameters
     total_params = sum(p.numel() for p in operator.parameters())
@@ -254,8 +254,8 @@ def main():
     log_dir = f"runs/{timestamp}"
     writer = SummaryWriter(log_dir=log_dir)
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size)
-    val_loader = DataLoader(test_dataset, batch_size=batch_size)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
     mse_loss = torch.nn.MSELoss()
 
@@ -292,7 +292,6 @@ def main():
 
         loss_train /= len(train_loader)
 
-        print(epoch)
         if log_tensorboard:
             writer.add_scalar("Loss/Train", loss_train, epoch)
 
@@ -307,7 +306,8 @@ def main():
                     v = v.to(device)
                     pred = operator(x, u, y)
                     pred = pred.reshape(v.shape)
-                    loss = mse_loss(pred, y)
+
+                    loss = mse_loss(pred, v)
                     loss_eval += loss.detach().item()
 
             loss_eval /= len(val_loader)
@@ -316,6 +316,14 @@ def main():
 
             if log_tensorboard:
                 writer.add_scalar("Loss/Eval", loss_eval, epoch)
+
+            scheduler(logs)
+
+
+    # tensoorboard_callback = TensorBoardLogger(log_dir=log_dir)
+    # callbacks = [tensoorboard_callback]
+    # trainer = Trainer(operator=operator)
+    # trainer.fit(epochs=epochs, callbacks=callbacks, dataset=train_dataset, test_dataset=test_dataset)
 
     visualize_predictions(operator, train_dataset, num_samples=10, mode="train", device=device, log_dir=log_dir)
     visualize_predictions(operator, test_dataset, num_samples=10, mode="test", device=device, log_dir=log_dir)
