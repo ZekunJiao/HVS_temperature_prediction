@@ -31,7 +31,17 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
     fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
 
     for i in range(num_samples):
-        x, u, y, v = test_dataset[i] 
+        T_init, T_final = test_dataset[i] 
+
+        x, u = create_operator_input(T_init, observed_fraction=observed_fraction, domain_fraction=domain_fraction)
+            
+            # normalize function values
+        u_max = torch.max(u)
+        u_min = torch.min(u)
+        v_max = torch.max(v)
+        v_min = torch.min(v)
+        u = (u - u_min) / (u_max- u_min)
+        v = (v - v_min) / (v_max - v_min)
 
 
         x = x.to(device).unsqueeze(0)
@@ -266,8 +276,18 @@ def main():
 
     steps = math.ceil(len(train_dataset) / batch_size)
     print_loss_callback = PrintTrainingLoss(epochs, steps)
+
+    xx, xy = torch.meshgrid(torch.arange(nx, dtype=torch.float32), torch.arange(ny, dtype=torch.float32))
+    # normalize the coordinates
+    xx = xx / (nx - 1)
+    xy = xy / (ny - 1)
+    y = torch.stack([xy, xx])
     # Training
     for epoch in range(epochs):
+
+        T_input, T_output = test_dataset[i] 
+
+        x, u = create_operator_input(T_input)
         loss_train = 0.0
         operator.train()
         

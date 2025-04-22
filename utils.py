@@ -68,7 +68,7 @@ def create_operator_input_2(full_field, observed_fraction):
 
     return x, u
 
-def create_operator_input(full_field, observed_fraction, domain_fraction):
+def create_operator_input(T_input, observed_fraction, domain_fraction):
     """
     Create a partial input for an operator by randomly sampling a fraction of points
     from the top half of a 2D tensor (full_field of shape (H, W)).
@@ -81,8 +81,8 @@ def create_operator_input(full_field, observed_fraction, domain_fraction):
         x (torch.Tensor): Tensor of shape (2, num_observed) containing the (col, row) coordinates.
         u (torch.Tensor): Tensor of shape (num_observed,) containing the sampled field values.
     """
-    device = full_field.device
-    H, W = full_field.shape
+    device = T_input.device
+    H, W = T_input.shape
 
     # Restrict to the top half of the field
     H_sample = (H * domain_fraction)
@@ -106,7 +106,7 @@ def create_operator_input(full_field, observed_fraction, domain_fraction):
     x = torch.stack([col_indices_norm, row_indices_norm])  # Shape: (2, num_observed)
 
     # Extract observed values from the top half of the field
-    u = full_field[:H_sample, :].view(-1)[indices]
+    u = T_input[:H_sample, :].view(-1)[indices]
     
 
     return x, u

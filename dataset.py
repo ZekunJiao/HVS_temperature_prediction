@@ -243,36 +243,72 @@ class OperatorTemperatureDataset(OperatorDataset):
             torch.save(self, save_path)
             print(f"Dataset saved at {save_path}")
 
-class OperatorInitMappingDataset(OperatorDataset):
-    def __init__(
+
+class SimulationDataset(td.Dataset):
+    def __init__(      
         self, 
         num_simulations, 
         nx, ny, dx, dy, nt, dt, 
         t0, 
+        noise_amplitude, 
+        device,
+        save_path
+    ):
+        
+        super().__init__()
+        inputs = []
+        outputs = []
+        for i in range(num_simulations):
+            print(f"generating simulation {i}")
+            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device=device)
+            inputs.append(T_series[t0].cpu())
+            outputs.append(T_series[nt-1].cpu())
+            del T_series
+            torch.cuda.empty_cache()
+        self.inputs = torch.stack(inputs)
+        self.outputs = torch.stack(outputs)
+
+        torch.save({
+            'inputs':  self.inputs,
+            'outputs': self.outputs
+        }, save_path)
+
+    def __getitem__(self, index): 
+        return (self.inputs[index], self.outputs[index])
+
+    def __len__(self):
+        return self.inputs.shape[0]
+
+
+class OperatorFieldMappingDataset(OperatorDataset):
+    def __init__(
+        self, 
         observed_fraction, 
         domain_fraction, 
-        noise_amplitude, 
-        device, 
-        save_path=None
-     ):
+        simulation_file_path,
+        save_path
+    ):
+        
+        simulation_dataset = torch.load(simulation_file_path, map_location="cpu")
+
+        inputs = simulation_dataset["inputs"]
+        outputs = simulation_dataset["outputs"]
+        N, H, W = inputs.shape
+
+        print(f" ############## Loading simulation dataset: {simulation_file_path}, size: {N} ##################")
+
         x_data = []
         u_data = []
         v_data = []
 
-        xx, xy = torch.meshgrid(torch.arange(nx, dtype=torch.float32), torch.arange(ny, dtype=torch.float32))
+        yy, xx = torch.meshgrid(torch.linspace(0, 1, H), torch.linspace(0, 1, W), indexing="ij")
         # normalize the coordinates
-        xx = xx / (nx - 1)
-        xy = xy / (ny - 1)
-        y = torch.stack([xy, xx])
+        y = torch.stack([yy, xx])
 
-        for i in range(num_simulations):
-            print(f"generating simulation {i}")
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device=device)
-
-            T_init = T_series[t0]
-            v = T_series[nt-1]
-            x, u = create_operator_input(T_init, observed_fraction=observed_fraction, domain_fraction=domain_fraction)
+        for i in range(N):
+            x, u = create_operator_input(T_input=inputs[i], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
             
+            v = outputs[i]
             # normalize function values
             u_max = torch.max(u)
             u_min = torch.min(u)
@@ -281,43 +317,40 @@ class OperatorInitMappingDataset(OperatorDataset):
             u = (u - u_min) / (u_max- u_min)
             v = (v - v_min) / (v_max - v_min)
 
-            # ######### plotting ##########
-            # fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+            ######### plotting ##########
+            fig, ax = plt.subplots(1, 2, figsize=(14, 6))
 
-            # scatter_1 = ax[0].scatter(
-            #     x[0].cpu(), 
-            #     x[1].cpu(),
-            #     c=u.cpu(), 
-            #     cmap="viridis", 
-            # )
-            # ax[0].set_aspect("equal")
-            # cbar1 = fig.colorbar(scatter_1, ax=ax[0])
-            # cbar1.set_label("u value")
+            scatter_1 = ax[0].scatter(
+                x[0].cpu(), 
+                x[1].cpu(),
+                c=u.cpu(), 
+                cmap="viridis", 
+            )
+            ax[0].set_aspect("equal")
+            cbar1 = fig.colorbar(scatter_1, ax=ax[0])
+            cbar1.set_label("u value")
 
-            # scatter_2 = ax[1].scatter(
-            #     y[0].cpu(), 
-            #     y[1].cpu(),
-            #     c=v.cpu(), 
-            #     cmap="viridis", 
+            scatter_2 = ax[1].scatter(
+                y[0].cpu(), 
+                y[1].cpu(),
+                c=v.cpu(), 
+                cmap="viridis", 
                 
-            # )
-            # ax[1].set_aspect("equal")
-            # cbar2 = fig.colorbar(scatter_2, ax=ax[1])
-            # cbar2.set_label("v value")
+            )
+            ax[1].set_aspect("equal")
+            cbar2 = fig.colorbar(scatter_2, ax=ax[1])
+            cbar2.set_label("v value")
 
-            # plt.tight_layout()
-            # plt.show()
-            # ######## end plotting ########
+            plt.tight_layout()
+            plt.show()
+            ######## end plotting ########
 
             x_data.append(x)
             u_data.append(u)
-            v_data.append(v)
-            del T_series
-            torch.cuda.empty_cache()
-    
+            v_data.append(v)    
 
         x = torch.stack(x_data)
-        y = y.unsqueeze(0).expand(num_simulations, *y.shape)
+        y = y.unsqueeze(0).expand(N, *y.shape)
         u = torch.stack(u_data)
         v = torch.stack(v_data)
 
@@ -325,9 +358,10 @@ class OperatorInitMappingDataset(OperatorDataset):
         v = torch.unsqueeze(v, dim=1)
 
         super().__init__(u=u, v=v, x=x, y=y)
-        dir_name = os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        torch.save(self, save_path)
-        print(f"Dataset saved at {save_path}")
+
+        if save_path:
+            torch.save(self, save_path)
+            print(f"Dataset saved at {save_path}")
 
 
 if __name__ == "__main__": 
@@ -338,31 +372,52 @@ if __name__ == "__main__":
     os.chdir(script_dir)  # Set script directory as working directory
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    nx, ny = 20, 20
-    dx, dy = 0.05, 0.05
-    num_simulations = 5000
+    ############## generate simulation dataset ###############
+    # nx, ny = 20, 20
+    # dx, dy = 0.05, 0.05
+    # num_simulations = 50
+    # t0 = 0
+    # nt = 300
+    # dt = 0.0001
+
+    # save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_to{t0}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
+
+    # print(save_path_simulation)
+    # if not os.path.exists(os.path.dirname(save_path_simulation)):
+    #     print("no such path")
+    #     exit()
+    
+    # simulation_dataset = SimulationDataset(
+    #     num_simulations=num_simulations,
+    #     nx=nx,
+    #     ny=ny,
+    #     dx=dx,
+    #     dy=dy,
+    #     nt=300,
+    #     dt=0.0001,
+    #     noise_amplitude=0,
+    #     device=device,
+    #     t0=t0,
+    #     save_path=save_path_simulation
+    # )
+
+    #######################################################
+
+    ############ generate operator dataset ################
+
     observed_fraction = 0.9
-    t0 = 0
+    domain_fraction = 1
+    simulation_file = "simulation_n50_to0_t0.030_nx20_ny20.pt"
+    simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
+    simulation_file = simulation_file.replace(".pt", "")
+    save_path = os.path.join(script_dir, "datasets", f"operator_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")
 
-    save_path = os.path.join(script_dir, "datasets", f"operator_init_n{num_simulations}_t{t0}_observed{observed_fraction}_nx{nx}_ny{ny}.pt")
-
-    print(save_path)
-    if not os.path.exists(os.path.dirname(save_path)):
-        print("no such path")
-        exit()
-
-    print(num_simulations)
-    dataset = OperatorInitMappingDataset(
-        num_simulations, 
-        nx, ny, dx, dy, 
-        nt=300, 
-        dt=0.0001,
-        t0=t0, 
-        noise_amplitude=0, 
-        device=device, 
+    dataset = OperatorFieldMappingDataset(
         observed_fraction=observed_fraction, 
-        domain_fraction=1,
+        domain_fraction=domain_fraction,
+        simulation_file_path=simulation_file_path,
         save_path=save_path
     )
 
     print(f"Dataset size: {len(dataset)} samples")
+    #######################################################
