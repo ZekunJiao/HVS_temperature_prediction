@@ -11,7 +11,7 @@ from datetime import datetime
 from torch.utils.data import DataLoader
 
 from torch.utils.tensorboard import SummaryWriter
-from dataset import OperatorTemperatureDataset, OperatorInitMappingDataset
+from dataset import OperatorTemperatureDataset, OperatorFieldMappingDataset
 from continuiti.trainer.scheduler import LinearLRScheduler
 from continuiti.trainer.callbacks import PrintTrainingLoss, Logs
 import math
@@ -31,11 +31,7 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
     fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
 
     for i in range(num_samples):
-        T_init, T_final = test_dataset[i] 
-
-        x, u = create_operator_input(T_init, observed_fraction=observed_fraction, domain_fraction=domain_fraction)
-            
-            # normalize function values
+        x,u,y,v = test_dataset[i]
         u_max = torch.max(u)
         u_min = torch.min(u)
         v_max = torch.max(v)
@@ -71,12 +67,12 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
         fig.colorbar(im1, ax=ax1)
 
         ax2.set_title("Ground Truth")
-        im2 = ax2.scatter(y[0], y[1], c=v, cmap='viridis', vmin=0, vmax=1)
+        im2 = ax2.scatter(y[1], y[0], c=v, cmap='viridis', vmin=0, vmax=1)
         ax2.set_aspect("equal")
         fig.colorbar(im2, ax=ax2)
 
         ax3.set_title("Prediction")
-        im3 = ax3.scatter(y[0], y[1], c=prediction, cmap='viridis', vmin=0, vmax=1)
+        im3 = ax3.scatter(y[1], y[0], c=prediction, cmap='viridis', vmin=0, vmax=1)
         ax3.set_aspect("equal")
         fig.colorbar(im3, ax=ax3)
 
@@ -195,7 +191,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    data_file_name = "operator_init_n5000_observed0.9_nx20_ny20.pt"
+    data_file_name = "operator_oberserved0.9_domain1_simulation_n50_to0_t0.030_nx10_ny20.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device: ", torch.cuda.get_device_name(torch.cuda.current_device()))
@@ -206,7 +202,7 @@ def main():
         print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
         print(dataset.shapes)
 
-    # visualize_dataset(dataset, n=5)
+    visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -277,17 +273,9 @@ def main():
     steps = math.ceil(len(train_dataset) / batch_size)
     print_loss_callback = PrintTrainingLoss(epochs, steps)
 
-    xx, xy = torch.meshgrid(torch.arange(nx, dtype=torch.float32), torch.arange(ny, dtype=torch.float32))
-    # normalize the coordinates
-    xx = xx / (nx - 1)
-    xy = xy / (ny - 1)
-    y = torch.stack([xy, xx])
+
     # Training
     for epoch in range(epochs):
-
-        T_input, T_output = test_dataset[i] 
-
-        x, u = create_operator_input(T_input)
         loss_train = 0.0
         operator.train()
         

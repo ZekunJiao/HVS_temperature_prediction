@@ -2,7 +2,7 @@ from typing import Tuple
 import torch
 import random
 from torch.utils.data import Dataset
-from utils import create_masked_input, create_operator_input
+from utils import create_masked_input, create_x
 from simulation import simulate_simulation
 import os
 import numpy as np
@@ -294,19 +294,23 @@ class OperatorFieldMappingDataset(OperatorDataset):
         inputs = simulation_dataset["inputs"]
         outputs = simulation_dataset["outputs"]
         N, H, W = inputs.shape
-
+        print("input shape", inputs[0].shape)
         print(f" ############## Loading simulation dataset: {simulation_file_path}, size: {N} ##################")
 
-        x_data = []
         u_data = []
         v_data = []
 
-        yy, xx = torch.meshgrid(torch.linspace(0, 1, H), torch.linspace(0, 1, W), indexing="ij")
+        h_grid, w_grid = torch.meshgrid(torch.linspace(0, 1, H), torch.linspace(0, 1, W), indexing="ij")
         # normalize the coordinates
-        y = torch.stack([yy, xx])
+        y = torch.stack([h_grid, w_grid])
+
+        x = create_x(T_input=inputs[0], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
 
         for i in range(N):
-            x, u = create_operator_input(T_input=inputs[i], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
+            cols = (x[0] * (W - 1)).round().long()  # x[0] → columns, scale by W-1
+            rows = (x[1] * (H - 1)).round().long()  # x[1] → rows,    scale by H-1
+
+            u = inputs[i, rows, cols]  
             
             v = outputs[i]
             # normalize function values
@@ -318,38 +322,53 @@ class OperatorFieldMappingDataset(OperatorDataset):
             v = (v - v_min) / (v_max - v_min)
 
             ######### plotting ##########
-            fig, ax = plt.subplots(1, 2, figsize=(14, 6))
+            # fig, ax = plt.subplots(1, 4, figsize=(20, 6))
 
-            scatter_1 = ax[0].scatter(
-                x[0].cpu(), 
-                x[1].cpu(),
-                c=u.cpu(), 
-                cmap="viridis", 
-            )
-            ax[0].set_aspect("equal")
-            cbar1 = fig.colorbar(scatter_1, ax=ax[0])
-            cbar1.set_label("u value")
+            # scatter_1 = ax[0].scatter(
+            #     x[0].cpu(), 
+            #     x[1].cpu(),
+            #     c=u.cpu(), 
+            #     cmap="viridis", 
+            # )
+            # ax[0].set_aspect("equal")
+            # cbar1 = fig.colorbar(scatter_1, ax=ax[0])
+            # cbar1.set_label("u value")
 
-            scatter_2 = ax[1].scatter(
-                y[0].cpu(), 
-                y[1].cpu(),
-                c=v.cpu(), 
-                cmap="viridis", 
-                
-            )
-            ax[1].set_aspect("equal")
-            cbar2 = fig.colorbar(scatter_2, ax=ax[1])
-            cbar2.set_label("v value")
+            # scatter_2 = ax[1].scatter(
+            #     y[1].cpu(), 
+            #     y[0].cpu(),
+            #     c=v.cpu(), 
+            #     cmap="viridis", 
+            # )
+            # ax[1].set_aspect("equal")
+            # cbar2 = fig.colorbar(scatter_2, ax=ax[1])
+            # cbar2.set_label("v value")
 
-            plt.tight_layout()
-            plt.show()
+            # im_1 = ax[2].imshow(
+            #     inputs[i],
+            #     cmap="viridis", 
+            #     origin="lower"
+            # )
+            # ax[2].set_aspect("equal")
+            # cbar4 = fig.colorbar(im_1, ax=ax[2])
+            # cbar4.set_label("v value")
+
+            # im_2 = ax[3].imshow(
+            #     outputs[i],
+            #     cmap="viridis", 
+            #     origin="lower"
+            # )
+            # ax[3].set_aspect("equal")
+            # cbar4 = fig.colorbar(im_2, ax=ax[3])
+            # cbar4.set_label("v value")
+
+            # plt.tight_layout()
+            # plt.show()
             ######## end plotting ########
-
-            x_data.append(x)
             u_data.append(u)
             v_data.append(v)    
 
-        x = torch.stack(x_data)
+        x = x.unsqueeze(0).expand(N, *x.shape)
         y = y.unsqueeze(0).expand(N, *y.shape)
         u = torch.stack(u_data)
         v = torch.stack(v_data)
@@ -372,52 +391,52 @@ if __name__ == "__main__":
     os.chdir(script_dir)  # Set script directory as working directory
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    ############## generate simulation dataset ###############
-    # nx, ny = 20, 20
-    # dx, dy = 0.05, 0.05
-    # num_simulations = 50
-    # t0 = 0
-    # nt = 300
-    # dt = 0.0001
+    ############# generate simulation dataset ###############
+    nx, ny = 10, 20
+    dx, dy = 0.05, 0.05
+    num_simulations = 5000
+    t0 = 0
+    nt = 300
+    dt = 0.0001
 
-    # save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_to{t0}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
+    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_to{t0}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
 
-    # print(save_path_simulation)
-    # if not os.path.exists(os.path.dirname(save_path_simulation)):
-    #     print("no such path")
-    #     exit()
+    print(save_path_simulation)
+    if not os.path.exists(os.path.dirname(save_path_simulation)):
+        print("no such path")
+        exit()
     
-    # simulation_dataset = SimulationDataset(
-    #     num_simulations=num_simulations,
-    #     nx=nx,
-    #     ny=ny,
-    #     dx=dx,
-    #     dy=dy,
-    #     nt=300,
-    #     dt=0.0001,
-    #     noise_amplitude=0,
-    #     device=device,
-    #     t0=t0,
-    #     save_path=save_path_simulation
-    # )
+    simulation_dataset = SimulationDataset(
+        num_simulations=num_simulations,
+        nx=nx,
+        ny=ny,
+        dx=dx,
+        dy=dy,
+        nt=300,
+        dt=0.0001,
+        noise_amplitude=0,
+        device=device,
+        t0=t0,
+        save_path=save_path_simulation
+    )
 
-    #######################################################
+    ######################################################
 
     ############ generate operator dataset ################
 
-    observed_fraction = 0.9
-    domain_fraction = 1
-    simulation_file = "simulation_n50_to0_t0.030_nx20_ny20.pt"
-    simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
-    simulation_file = simulation_file.replace(".pt", "")
-    save_path = os.path.join(script_dir, "datasets", f"operator_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")
+    # observed_fraction = 0.9
+    # domain_fraction = 1
+    # simulation_file = "simulation_n50_to0_t0.030_nx10_ny20.pt"
+    # simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
+    # simulation_file = simulation_file.replace(".pt", "")
+    # save_path = os.path.join(script_dir, "datasets", f"operator_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")
 
-    dataset = OperatorFieldMappingDataset(
-        observed_fraction=observed_fraction, 
-        domain_fraction=domain_fraction,
-        simulation_file_path=simulation_file_path,
-        save_path=save_path
-    )
+    # dataset = OperatorFieldMappingDataset(
+    #     observed_fraction=observed_fraction, 
+    #     domain_fraction=domain_fraction,
+    #     simulation_file_path=simulation_file_path,
+    #     save_path=save_path
+    # )
 
-    print(f"Dataset size: {len(dataset)} samples")
+    # print(f"Dataset size: {len(dataset)} samples")
     #######################################################
