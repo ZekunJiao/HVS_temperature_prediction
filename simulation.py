@@ -144,4 +144,10 @@ if __name__ == "__main__":
     ani = animation.FuncAnimation(
         fig, update, frames=frames, interval=30, blit=True
     )
-    plt.show()
+    plt.imshow(T[0].cpu().numpy(), cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
+    plt.colorbar(label='Temperature')
+    plt.savefig("simulation1.png")
+
+    plt.imshow(T[nt-1].cpu().numpy(), cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
+    plt.colorbar(label='Temperature')
+    plt.savefig("simulation2.png")

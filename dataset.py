@@ -249,6 +249,8 @@ class SimulationDataset(td.Dataset):
         self, 
         num_simulations, 
         nx, ny, dx, dy, nt, dt, 
+        d_in, d_out,
+        start_x, start_y, end_x, end_y,
         t0, 
         noise_amplitude, 
         device,
@@ -260,7 +262,10 @@ class SimulationDataset(td.Dataset):
         outputs = []
         for i in range(num_simulations):
             print(f"generating simulation {i}")
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device=device)
+            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt,
+                                           d_in=d_in, d_out=d_out,
+                                             start_x=start_x, end_x=end_x, start_y=start_y, end_y=end_y,
+                                            noise_amplitude=noise_amplitude, device=device)
             inputs.append(T_series[t0].cpu())
             outputs.append(T_series[nt-1].cpu())
             del T_series
@@ -403,11 +408,19 @@ if __name__ == "__main__":
     num_simulations = 10000
     nt = 300
     t0 = nt - 1
+    d_in = 0.1
+    d_out = 0.3
+    start_y = random.randint(0, int(nx / 2) - 1)
+    end_y = random.randint(start_y, nx - 1)    
+    start_x = random.randint(0, int(ny / 2) - 1)
+    end_x = random.randint(start_x, ny - 1)
 
     dt = 0.0001
 
-    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_t0{t0}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
-
+    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
+                                        f"simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}"
+                                        f"_din{d_in}_dout{d_out}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
+    
     print(save_path_simulation)
     if not os.path.exists(os.path.dirname(save_path_simulation)):
         print("no such path")
@@ -419,8 +432,14 @@ if __name__ == "__main__":
         ny=ny,
         dx=dx,
         dy=dy,
-        nt=300,
-        dt=0.0001,
+        d_in=d_in,
+        d_out=d_out,
+        start_x=start_x,
+        start_y=start_y,
+        end_x=end_x,
+        end_y=end_y,
+        nt=nt,
+        dt=dt,
         noise_amplitude=0,
         device=device,
         t0=t0,
