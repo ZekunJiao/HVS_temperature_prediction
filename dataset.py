@@ -249,6 +249,8 @@ class SimulationDataset(td.Dataset):
         self, 
         num_simulations, 
         nx, ny, dx, dy, nt, dt, 
+        d_in, d_out,
+        start_x, start_y, end_x, end_y,
         t0, 
         noise_amplitude, 
         device,
@@ -260,7 +262,10 @@ class SimulationDataset(td.Dataset):
         outputs = []
         for i in range(num_simulations):
             print(f"generating simulation {i}")
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device=device)
+            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt,
+                                           d_in=d_in, d_out=d_out,
+                                             start_x=start_x, end_x=end_x, start_y=start_y, end_y=end_y,
+                                            noise_amplitude=noise_amplitude, device=device)
             inputs.append(T_series[t0].cpu())
             outputs.append(T_series[nt-1].cpu())
             del T_series
@@ -326,50 +331,51 @@ class OperatorFieldMappingDataset(OperatorDataset):
             u = (u - u_min) / (u_max- u_min)
             v = (v - v_min) / (v_max - v_min)
 
-            ######### plotting ##########
-            # fig, ax = plt.subplots(1, 4, figsize=(20, 6))
+            ######## plotting ##########
+            fig, ax = plt.subplots(1, 4, figsize=(20, 6))
 
-            # scatter_1 = ax[0].scatter(
-            #     x[0].cpu(), 
-            #     x[1].cpu(),
-            #     c=u.cpu(), 
-            #     cmap="viridis", 
-            # )
-            # ax[0].set_aspect("equal")
-            # cbar1 = fig.colorbar(scatter_1, ax=ax[0])
-            # cbar1.set_label("u value")
+            scatter_1 = ax[0].scatter(
+                x[0].cpu(), 
+                x[1].cpu(),
+                c=u.cpu(), 
+                cmap="viridis", 
+            )
+            ax[0].set_aspect("equal")
+            cbar1 = fig.colorbar(scatter_1, ax=ax[0])
+            cbar1.set_label("u value")
 
-            # scatter_2 = ax[1].scatter(
-            #     y[1].cpu(), 
-            #     y[0].cpu(),
-            #     c=v.cpu(), 
-            #     cmap="viridis", 
-            # )
-            # ax[1].set_aspect("equal")
-            # cbar2 = fig.colorbar(scatter_2, ax=ax[1])
-            # cbar2.set_label("v value")
+            scatter_2 = ax[1].scatter(
+                y[1].cpu(), 
+                y[0].cpu(),
+                c=v.cpu(), 
+                cmap="viridis", 
+            )
+            ax[1].set_aspect("equal")
+            cbar2 = fig.colorbar(scatter_2, ax=ax[1])
+            cbar2.set_label("v value")
 
-            # im_1 = ax[2].imshow(
-            #     inputs[i],
-            #     cmap="viridis", 
-            #     origin="lower"
-            # )
-            # ax[2].set_aspect("equal")
-            # cbar4 = fig.colorbar(im_1, ax=ax[2])
-            # cbar4.set_label("v value")
+            im_1 = ax[2].imshow(
+                inputs[i],
+                cmap="viridis", 
+                origin="lower"
+            )
+            ax[2].set_aspect("equal")
+            cbar4 = fig.colorbar(im_1, ax=ax[2])
+            cbar4.set_label("v value")
 
-            # im_2 = ax[3].imshow(
-            #     outputs[i],
-            #     cmap="viridis", 
-            #     origin="lower"
-            # )
-            # ax[3].set_aspect("equal")
-            # cbar4 = fig.colorbar(im_2, ax=ax[3])
-            # cbar4.set_label("v value")
+            im_2 = ax[3].imshow(
+                outputs[i],
+                cmap="viridis", 
+                origin="lower"
+            )
+            ax[3].set_aspect("equal")
+            cbar4 = fig.colorbar(im_2, ax=ax[3])
+            cbar4.set_label("v value")
 
-            # plt.tight_layout()
-            # plt.show()
-            ######## end plotting ########
+            plt.tight_layout()
+            plt.savefig(f"./temp.png")
+            plt.show()
+            ####### end plotting ########
             u_data.append(u)
             v_data.append(v)    
 
@@ -396,55 +402,68 @@ if __name__ == "__main__":
     os.chdir(script_dir)  # Set script directory as working directory
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    # ############# generate simulation dataset ###############
-    # nx, ny = 10, 20
-    # dx, dy = 0.05, 0.05
-    # num_simulations = 5000
-    # nt = 300
-    # t0 = nt - 1
 
-    # dt = 0.0001
+    nx, ny = 20, 20
+    dx, dy = 0.05, 0.05
+    num_simulations = 10000
+    nt = 300
+    t0 = nt - 1
+    d_in = 0.1
+    d_out = 0.3
+    start_y = random.randint(0, int(nx / 2) - 1)
+    end_y = random.randint(start_y, nx - 1)    
+    start_x = random.randint(0, int(ny / 2) - 1)
+    end_x = random.randint(start_x, ny - 1)
+    dt = 0.0001
 
-    # save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
 
-    # print(save_path_simulation)
-    # if not os.path.exists(os.path.dirname(save_path_simulation)):
-    #     print("no such path")
-    #     exit()
+    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
+                                        f"simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}"
+                                        f"_din{d_in}_dout{d_out}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
     
-    # simulation_dataset = SimulationDataset(
-    #     num_simulations=num_simulations,
-    #     nx=nx,
-    #     ny=ny,
-    #     dx=dx,
-    #     dy=dy,
-    #     nt=300,
-    #     dt=0.0001,
-    #     noise_amplitude=0,
-    #     device=device,
-    #     t0=t0,
-    #     save_path=save_path_simulation
-    # )
-
+    print(save_path_simulation)
+    if not os.path.exists(os.path.dirname(save_path_simulation)):
+        print("no such path")
+        exit()
+    
+    simulation_dataset = SimulationDataset(
+        num_simulations=num_simulations,
+        nx=nx,
+        ny=ny,
+        dx=dx,
+        dy=dy,
+        d_in=d_in,
+        d_out=d_out,
+        start_x=start_x,
+        start_y=start_y,
+        end_x=end_x,
+        end_y=end_y,
+        nt=nt,
+        dt=dt,
+        noise_amplitude=0,
+        device=device,
+        t0=t0,
+        save_path=save_path_simulation
+    )
     # ######################################################
 
-    ########### generate operator dataset ################
+    # ########### generate operator dataset ################
 
-    num_samples = 1000
-    observed_fraction = 0.1
-    domain_fraction = 0.5
-    simulation_file = "simulation_n5000_t0299_t0.030_nx10_ny20.pt"
-    simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
-    simulation_file = simulation_file.replace(".pt", "")
-    save_path = os.path.join(script_dir, "datasets", f"operator_m{num_samples}_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")
+    # num_samples = 1000
+    # observed_fraction = 0.1
+    # domain_fraction = 0.5
+    # simulation_file = "simulation_n5000_to0_t0.030_nx10_ny20.pt"
+    # simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
+    # simulation_file = simulation_file.replace(".pt", "")
+    # save_path = os.path.join(script_dir, "datasets", f"operator_m{num_samples}_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")
 
-    dataset = OperatorFieldMappingDataset(
-        num_samples=num_samples,
-        observed_fraction=observed_fraction, 
-        domain_fraction=domain_fraction,
-        simulation_file_path=simulation_file_path,
-        save_path=save_path
-    )
+    # dataset = OperatorFieldMappingDataset(
+    #     num_samples=num_samples,
+    #     observed_fraction=observed_fraction, 
+    #     domain_fraction=domain_fraction,
+    #     simulation_file_path=simulation_file_path,
+    #     save_path=save_path
+    # )
 
-    print(f"Dataset size: {len(dataset)} samples")
-    ######################################################
+    # print(f"Dataset size: {len(dataset)} samples")
+    # ######################################################

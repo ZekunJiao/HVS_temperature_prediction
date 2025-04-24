@@ -52,7 +52,7 @@ def initialize_simulation(nx, ny, dx, dy, noise_amplitude=0.0, device='cpu'):
     return initial
 
 
-def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude=0.0, device='cpu') -> torch.Tensor:
+def simulate_simulation(nx, ny, dx, dy, nt, dt, d_in, d_out, start_y, end_y, start_x, end_x, noise_amplitude=0.0, device='cpu') -> torch.Tensor:
     """
     Simulates the heat equation via RK4.
 
@@ -63,8 +63,15 @@ def simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude=0.0, device='cpu
     T[0] = initialize_simulation(nx, ny, dx, dy, noise_amplitude, device=device)
 
     # diffusion coefficient (same shape as one slice)
-    D = torch.full((ny, nx), 0.3, device=device)
-
+    D = torch.full((ny, nx), d_out, device=device)
+    start_y = random.randint(0, int(nx / 2) - 1)
+    end_y = random.randint(start_y, nx - 1)
+    start_x = random.randint(0, int(ny / 2) - 1)
+    end_x = random.randint(start_x, ny - 1)
+    D[start_x:end_x, start_y:end_y] = d_in
+    plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
+    plt.colorbar(label='Diffusion Coefficient')
+    plt.savefig("diffusion_coefficient.png")
     for t in range(nt - 1):
         T[t + 1] = rk4_step(T[t], D, dx, dy, dt)
 
@@ -95,9 +102,16 @@ if __name__ == "__main__":
     nx, ny = 100, 200       # columns, rows
     dx, dy = 0.01, 0.01
     nt, dt = 800, 1e-4
+    d_in = 0.1
+    d_out = 0.3
+    start_y = random.randint(0, int(nx / 2) - 1)
+    end_y = random.randint(start_y, nx - 1)    
+    start_x = random.randint(0, int(ny / 2) - 1)
+    end_x = random.randint(start_x, ny - 1)
 
     # run
-    T = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude=0.0, device=device)
+    T = simulate_simulation(nx=nx, ny=ny, dx=dx, dy=dy, nt=nt, dt=dt, d_in=d_in, d_out=d_out, 
+                            start_x=start_x, start_y=start_y, end_x=end_x, end_y=end_y, noise_amplitude=0.0, device=device)
 
     # show initial condition
     plt.figure(figsize=(6,5))
@@ -131,3 +145,10 @@ if __name__ == "__main__":
         fig, update, frames=frames, interval=30, blit=True
     )
     plt.show()
+    plt.imshow(T[0].cpu().numpy(), cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
+    plt.colorbar(label='Temperature')
+    plt.savefig("simulation1.png")
+
+    plt.imshow(T[nt-1].cpu().numpy(), cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
+    plt.colorbar(label='Temperature')
+    plt.savefig("simulation2.png")

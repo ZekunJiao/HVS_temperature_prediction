@@ -5,3 +5,4 @@ datasets/*
 wandb/*
 saved_models/*
 temp/*
+archive/*
