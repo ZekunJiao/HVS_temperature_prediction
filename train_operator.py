@@ -192,7 +192,7 @@ def main():
     os.chdir(script_dir)  # Set script directory as working directory
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    ################ LOAD DATASET ############
+    ################ LOAD OPERATOR DATASET ############
     # data_file_name = "operator_m1000_oberserved0.1_domain0.5_simulation_n5000_t0299_t0.030_nx10_ny20.pt"
     # save_path = os.path.join(script_dir, "datasets", data_file_name)
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -205,13 +205,14 @@ def main():
     #     print(dataset.shapes)
     ############################################
 
-
+    ############### CREATE OPERATOR DATASET ###############
     num_samples = 1000
     observed_fraction = 0.1
     domain_fraction = 0.5
-    simulation_file = "simulation_n5000_t0299_t0.030_nx10_ny20.pt"
+    simulation_file = "simulation_n5000_t0299_t0.030_nx100_ny100.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
+    data_file_name = f"operator_m{num_samples}_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt"
 
     dataset = OperatorFieldMappingDataset(
         num_samples=num_samples,
@@ -220,7 +221,7 @@ def main():
         simulation_file_path=simulation_file_path,
         save_path=None
     )
-
+    ######################################################
     print(f"Dataset size: {len(dataset)} samples")
 
     # visualize_dataset(dataset, n=5)

@@ -64,14 +64,12 @@ def simulate_simulation(nx, ny, dx, dy, nt, dt, d_in, d_out, start_y, end_y, sta
 
     # diffusion coefficient (same shape as one slice)
     D = torch.full((ny, nx), d_out, device=device)
-    start_y = random.randint(0, int(nx / 2) - 1)
-    end_y = random.randint(start_y, nx - 1)
-    start_x = random.randint(0, int(ny / 2) - 1)
-    end_x = random.randint(start_x, ny - 1)
     D[start_x:end_x, start_y:end_y] = d_in
-    plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
-    plt.colorbar(label='Diffusion Coefficient')
-    plt.savefig("diffusion_coefficient.png")
+    # plt.figure(figsize=(6, 5))
+    # plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
+    # plt.colorbar(label='Diffusion Coefficient')
+    # plt.savefig("diffusion_coefficient.png")
+    # plt.show()
     for t in range(nt - 1):
         T[t + 1] = rk4_step(T[t], D, dx, dy, dt)
 

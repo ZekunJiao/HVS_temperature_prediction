@@ -8,6 +8,7 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 from continuiti.data import OperatorDataset
+import datetime
 
 
 class TemperatureDataset(Dataset):
@@ -268,6 +269,20 @@ class SimulationDataset(td.Dataset):
                                             noise_amplitude=noise_amplitude, device=device)
             inputs.append(T_series[t0].cpu())
             outputs.append(T_series[nt-1].cpu())
+
+            # plt.figure()  # Create a new figure for the initial temperature field
+            # plt.imshow(T_series[t0].cpu(), cmap="viridis", origin="lower")
+            # plt.colorbar(label="Temperature")
+            # plt.title(f"Temperature Field at Time {t0*dt:.3f}s")
+            # plt.savefig(f"./temp_init.png")
+
+            # plt.figure()  # Create a new figure for the final temperature field
+            # plt.imshow(T_series[nt-1].cpu(), cmap="viridis", origin="lower")
+            # plt.colorbar(label="Temperature")  
+            # plt.title(f"Temperature Field at Time {nt*dt:.3f}s")
+            # plt.savefig(f"./temp_final.png")
+            # plt.close()  # Close the figure to free memory
+
             del T_series
             torch.cuda.empty_cache()
         self.inputs = torch.stack(inputs)
@@ -332,49 +347,49 @@ class OperatorFieldMappingDataset(OperatorDataset):
             v = (v - v_min) / (v_max - v_min)
 
             ######## plotting ##########
-            fig, ax = plt.subplots(1, 4, figsize=(20, 6))
+            # fig, ax = plt.subplots(1, 4, figsize=(20, 6))
 
-            scatter_1 = ax[0].scatter(
-                x[0].cpu(), 
-                x[1].cpu(),
-                c=u.cpu(), 
-                cmap="viridis", 
-            )
-            ax[0].set_aspect("equal")
-            cbar1 = fig.colorbar(scatter_1, ax=ax[0])
-            cbar1.set_label("u value")
+            # scatter_1 = ax[0].scatter(
+            #     x[0].cpu(), 
+            #     x[1].cpu(),
+            #     c=u.cpu(), 
+            #     cmap="viridis", 
+            # )
+            # ax[0].set_aspect("equal")
+            # cbar1 = fig.colorbar(scatter_1, ax=ax[0])
+            # cbar1.set_label("u value")
 
-            scatter_2 = ax[1].scatter(
-                y[1].cpu(), 
-                y[0].cpu(),
-                c=v.cpu(), 
-                cmap="viridis", 
-            )
-            ax[1].set_aspect("equal")
-            cbar2 = fig.colorbar(scatter_2, ax=ax[1])
-            cbar2.set_label("v value")
+            # scatter_2 = ax[1].scatter(
+            #     y[1].cpu(), 
+            #     y[0].cpu(),
+            #     c=v.cpu(), 
+            #     cmap="viridis", 
+            # )
+            # ax[1].set_aspect("equal")
+            # cbar2 = fig.colorbar(scatter_2, ax=ax[1])
+            # cbar2.set_label("v value")
 
-            im_1 = ax[2].imshow(
-                inputs[i],
-                cmap="viridis", 
-                origin="lower"
-            )
-            ax[2].set_aspect("equal")
-            cbar4 = fig.colorbar(im_1, ax=ax[2])
-            cbar4.set_label("v value")
+            # im_1 = ax[2].imshow(
+            #     inputs[i],
+            #     cmap="viridis", 
+            #     origin="lower"
+            # )
+            # ax[2].set_aspect("equal")
+            # cbar4 = fig.colorbar(im_1, ax=ax[2])
+            # cbar4.set_label("v value")
 
-            im_2 = ax[3].imshow(
-                outputs[i],
-                cmap="viridis", 
-                origin="lower"
-            )
-            ax[3].set_aspect("equal")
-            cbar4 = fig.colorbar(im_2, ax=ax[3])
-            cbar4.set_label("v value")
+            # im_2 = ax[3].imshow(
+            #     outputs[i],
+            #     cmap="viridis", 
+            #     origin="lower"
+            # )
+            # ax[3].set_aspect("equal")
+            # cbar4 = fig.colorbar(im_2, ax=ax[3])
+            # cbar4.set_label("v value")
 
-            plt.tight_layout()
-            plt.savefig(f"./temp.png")
-            plt.show()
+            # plt.tight_layout()
+            # plt.savefig(f"./temp.png")
+            # plt.show()
             ####### end plotting ########
             u_data.append(u)
             v_data.append(v)    
@@ -403,8 +418,8 @@ if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 
-    nx, ny = 20, 20
-    dx, dy = 0.05, 0.05
+    nx, ny = 100, 100
+    dx, dy = 0.01, 0.01
     num_simulations = 10000
     nt = 300
     t0 = nt - 1
@@ -415,10 +430,11 @@ if __name__ == "__main__":
     start_x = random.randint(0, int(ny / 2) - 1)
     end_x = random.randint(start_x, ny - 1)
     dt = 0.0001
-
+    timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
+    noise_amplitude = 0.0
 
     save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
-                                        f"simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}"
+                                        f"{timestamp}_simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}"
                                         f"_din{d_in}_dout{d_out}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
     
     print(save_path_simulation)
@@ -426,6 +442,14 @@ if __name__ == "__main__":
         print("no such path")
         exit()
     
+    D = torch.full((ny, nx), d_out, device=device)
+    D[start_x:end_x, start_y:end_y] = d_in
+    plt.figure(figsize=(6, 5))
+    plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
+    plt.colorbar(label='Diffusion Coefficient')
+    plt.savefig("diffusion_coefficient.png")
+    plt.show()
+
     simulation_dataset = SimulationDataset(
         num_simulations=num_simulations,
         nx=nx,
@@ -440,7 +464,7 @@ if __name__ == "__main__":
         end_y=end_y,
         nt=nt,
         dt=dt,
-        noise_amplitude=0,
+        noise_amplitude=noise_amplitude,
         device=device,
         t0=t0,
         save_path=save_path_simulation
