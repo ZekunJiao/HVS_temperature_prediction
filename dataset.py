@@ -396,44 +396,44 @@ if __name__ == "__main__":
     os.chdir(script_dir)  # Set script directory as working directory
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    ############# generate simulation dataset ###############
-    nx, ny = 10, 20
-    dx, dy = 0.05, 0.05
-    num_simulations = 5000
-    nt = 300
-    t0 = nt - 1
+    # ############# generate simulation dataset ###############
+    # nx, ny = 10, 20
+    # dx, dy = 0.05, 0.05
+    # num_simulations = 5000
+    # nt = 300
+    # t0 = nt - 1
 
-    dt = 0.0001
+    # dt = 0.0001
 
-    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_t0{t0}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
+    # save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
 
-    print(save_path_simulation)
-    if not os.path.exists(os.path.dirname(save_path_simulation)):
-        print("no such path")
-        exit()
+    # print(save_path_simulation)
+    # if not os.path.exists(os.path.dirname(save_path_simulation)):
+    #     print("no such path")
+    #     exit()
     
-    simulation_dataset = SimulationDataset(
-        num_simulations=num_simulations,
-        nx=nx,
-        ny=ny,
-        dx=dx,
-        dy=dy,
-        nt=300,
-        dt=0.0001,
-        noise_amplitude=0,
-        device=device,
-        t0=t0,
-        save_path=save_path_simulation
-    )
+    # simulation_dataset = SimulationDataset(
+    #     num_simulations=num_simulations,
+    #     nx=nx,
+    #     ny=ny,
+    #     dx=dx,
+    #     dy=dy,
+    #     nt=300,
+    #     dt=0.0001,
+    #     noise_amplitude=0,
+    #     device=device,
+    #     t0=t0,
+    #     save_path=save_path_simulation
+    # )
 
-    ######################################################
+    # ######################################################
 
     ########### generate operator dataset ################
 
     num_samples = 1000
     observed_fraction = 0.1
     domain_fraction = 0.5
-    simulation_file = "simulation_n5000_to0_t0.030_nx10_ny20.pt"
+    simulation_file = "simulation_n5000_t0299_t0.030_nx10_ny20.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     save_path = os.path.join(script_dir, "datasets", f"operator_m{num_samples}_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")

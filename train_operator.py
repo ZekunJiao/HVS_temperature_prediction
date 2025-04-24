@@ -77,7 +77,7 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
         fig.colorbar(im3, ax=ax3)
 
     plt.tight_layout()
-    plt.title(f"{mode}")
+    plt.suptitle(f"{mode}")
 
     # Save to file
     save_path = os.path.join(save_folder, filename)
@@ -190,17 +190,38 @@ def main():
     os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
-
-    data_file_name = "operator_m1000_oberserved0.1_domain0.5_simulation_n5000_to0_t0.030_nx10_ny20.pt"
-    save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("Device: ", torch.cuda.get_device_name(torch.cuda.current_device()))
 
-    # Create dataset
-    if os.path.exists(save_path):
-        dataset = torch.load(save_path, weights_only=False)
-        print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
-        print(dataset.shapes)
+    ################ LOAD DATASET ############
+    # data_file_name = "operator_m1000_oberserved0.1_domain0.5_simulation_n5000_t0299_t0.030_nx10_ny20.pt"
+    # save_path = os.path.join(script_dir, "datasets", data_file_name)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # print("Device: ", torch.cuda.get_device_name(torch.cuda.current_device()))
+
+    # # Create dataset
+    # if os.path.exists(save_path):
+    #     dataset = torch.load(save_path, weights_only=False)
+    #     print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
+    #     print(dataset.shapes)
+    ############################################
+
+
+    num_samples = 1000
+    observed_fraction = 0.1
+    domain_fraction = 0.5
+    simulation_file = "simulation_n5000_t0299_t0.030_nx10_ny20.pt"
+    simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
+    simulation_file = simulation_file.replace(".pt", "")
+
+    dataset = OperatorFieldMappingDataset(
+        num_samples=num_samples,
+        observed_fraction=observed_fraction, 
+        domain_fraction=domain_fraction,
+        simulation_file_path=simulation_file_path,
+        save_path=None
+    )
+
+    print(f"Dataset size: {len(dataset)} samples")
 
     # visualize_dataset(dataset, n=5)
 
