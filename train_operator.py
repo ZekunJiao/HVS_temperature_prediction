@@ -191,7 +191,7 @@ def main():
     script_dir = os.path.dirname(os.path.abspath(__file__))  # Get current script folder
     os.chdir(script_dir)  # Set script directory as working directory
 
-    data_file_name = "operator_oberserved0.9_domain1_simulation_n50_to0_t0.030_nx10_ny20.pt"
+    data_file_name = "operator_m1000_oberserved0.1_domain0.5_simulation_n5000_to0_t0.030_nx10_ny20.pt"
     save_path = os.path.join(script_dir, "datasets", data_file_name)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Device: ", torch.cuda.get_device_name(torch.cuda.current_device()))
@@ -202,7 +202,7 @@ def main():
         print(f" ############## DATASET: {data_file_name}, SIZE: {len(dataset)} ##################")
         print(dataset.shapes)
 
-    visualize_dataset(dataset, n=5)
+    # visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -215,7 +215,7 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 30
+    epochs = 1000
     trunk_depth = 8
     branch_depth = 8
     trunk_width = 32

@@ -283,6 +283,7 @@ class SimulationDataset(td.Dataset):
 class OperatorFieldMappingDataset(OperatorDataset):
     def __init__(
         self, 
+        num_samples,
         observed_fraction, 
         domain_fraction, 
         simulation_file_path,
@@ -294,6 +295,10 @@ class OperatorFieldMappingDataset(OperatorDataset):
         inputs = simulation_dataset["inputs"]
         outputs = simulation_dataset["outputs"]
         N, H, W = inputs.shape
+
+        if num_samples > N:
+            raise ValueError(f"num_samples ({num_samples}) cannot exceed available samples ({N}).")
+            
         print("input shape", inputs[0].shape)
         print(f" ############## Loading simulation dataset: {simulation_file_path}, size: {N} ##################")
 
@@ -306,7 +311,7 @@ class OperatorFieldMappingDataset(OperatorDataset):
 
         x = create_x(T_input=inputs[0], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
 
-        for i in range(N):
+        for i in range(num_samples):
             cols = (x[0] * (W - 1)).round().long()  # x[0] → columns, scale by W-1
             rows = (x[1] * (H - 1)).round().long()  # x[1] → rows,    scale by H-1
 
@@ -368,8 +373,8 @@ class OperatorFieldMappingDataset(OperatorDataset):
             u_data.append(u)
             v_data.append(v)    
 
-        x = x.unsqueeze(0).expand(N, *x.shape)
-        y = y.unsqueeze(0).expand(N, *y.shape)
+        x = x.unsqueeze(0).expand(num_samples, *x.shape)
+        y = y.unsqueeze(0).expand(num_samples, *y.shape)
         u = torch.stack(u_data)
         v = torch.stack(v_data)
 
@@ -395,11 +400,12 @@ if __name__ == "__main__":
     nx, ny = 10, 20
     dx, dy = 0.05, 0.05
     num_simulations = 5000
-    t0 = 0
     nt = 300
+    t0 = nt - 1
+
     dt = 0.0001
 
-    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_to{t0}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
+    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", f"simulation_n{num_simulations}_t0{t0}_t{nt*dt:.3f}_nx{nx}_ny{ny}.pt")
 
     print(save_path_simulation)
     if not os.path.exists(os.path.dirname(save_path_simulation)):
@@ -422,21 +428,23 @@ if __name__ == "__main__":
 
     ######################################################
 
-    ############ generate operator dataset ################
+    ########### generate operator dataset ################
 
-    # observed_fraction = 0.9
-    # domain_fraction = 1
-    # simulation_file = "simulation_n50_to0_t0.030_nx10_ny20.pt"
-    # simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
-    # simulation_file = simulation_file.replace(".pt", "")
-    # save_path = os.path.join(script_dir, "datasets", f"operator_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")
+    num_samples = 1000
+    observed_fraction = 0.1
+    domain_fraction = 0.5
+    simulation_file = "simulation_n5000_to0_t0.030_nx10_ny20.pt"
+    simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
+    simulation_file = simulation_file.replace(".pt", "")
+    save_path = os.path.join(script_dir, "datasets", f"operator_m{num_samples}_oberserved{observed_fraction}_domain{domain_fraction}_{simulation_file}.pt")
 
-    # dataset = OperatorFieldMappingDataset(
-    #     observed_fraction=observed_fraction, 
-    #     domain_fraction=domain_fraction,
-    #     simulation_file_path=simulation_file_path,
-    #     save_path=save_path
-    # )
+    dataset = OperatorFieldMappingDataset(
+        num_samples=num_samples,
+        observed_fraction=observed_fraction, 
+        domain_fraction=domain_fraction,
+        simulation_file_path=simulation_file_path,
+        save_path=save_path
+    )
 
-    # print(f"Dataset size: {len(dataset)} samples")
-    #######################################################
+    print(f"Dataset size: {len(dataset)} samples")
+    ######################################################

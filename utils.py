@@ -86,7 +86,7 @@ def create_x(T_input, observed_fraction, domain_fraction):
     H, W = T_input.shape
 
     # Restrict to the top half of the field
-    H_sample = (H * domain_fraction)
+    H_sample = int(H * domain_fraction)
     max_index = H_sample * W
     num_observed = int(observed_fraction * max_index)
 
