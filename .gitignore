@@ -6,3 +6,4 @@ wandb/*
 saved_models/*
 temp/*
 archive/*
+__pycache__/*

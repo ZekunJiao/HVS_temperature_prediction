@@ -192,7 +192,7 @@ def main():
     os.chdir(script_dir)  # Set script directory as working directory
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    ################ LOAD DATASET ############
+    ################ LOAD OPERATOR DATASET ############
     # data_file_name = "operator_m1000_oberserved0.1_domain0.5_simulation_n5000_t0299_t0.030_nx10_ny20.pt"
     # save_path = os.path.join(script_dir, "datasets", data_file_name)
     # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -205,13 +205,13 @@ def main():
     #     print(dataset.shapes)
     ############################################
 
+    ############### CREATE OPERATOR DATASET ###############
     num_samples = 1000
-    observed_fraction = 0.1
+    observed_fraction = 0.001
     domain_fraction = 0.5
     simulation_file = "simulation_n5000_t0299_t0.030_nx100_ny100.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
-
     dataset = OperatorFieldMappingDataset(
         num_samples=num_samples,
         observed_fraction=observed_fraction, 
@@ -220,9 +220,15 @@ def main():
         save_path=None
     )
 
+    _, H, W = dataset.v[0].shape
+    n_observed_points = observed_fraction * H * W * domain_fraction
+    print("observed points:", n_observed_points)
+    data_file_name = f"operator_m{num_samples}_oberserved{observed_fraction}_npoints{n_observed_points}_domain{domain_fraction}_{simulation_file}.pt"
+    ######################################################
+    
     print(f"Dataset size: {len(dataset)} samples")
 
-    visualize_dataset(dataset, n=5)
+    # visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -243,7 +249,7 @@ def main():
     batch_size = 32
     weight_decay = 0
     # Instantiate the operator using those variables
-    operator = DeepCatOperator(y
+    operator = DeepCatOperator(
         shapes=dataset.shapes, 
         device=device, 
         trunk_depth=trunk_depth, 
@@ -292,7 +298,6 @@ def main():
 
     steps = math.ceil(len(train_dataset) / batch_size)
     print_loss_callback = PrintTrainingLoss(epochs, steps)
-
 
     # Training
     for epoch in range(epochs):
