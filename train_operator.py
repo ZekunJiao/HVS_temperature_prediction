@@ -205,11 +205,10 @@ def main():
     #     print(dataset.shapes)
     ############################################
 
-
     num_samples = 1000
     observed_fraction = 0.1
     domain_fraction = 0.5
-    simulation_file = "simulation_n5000_t0299_t0.030_nx10_ny20.pt"
+    simulation_file = "simulation_n5000_t0299_t0.030_nx100_ny100.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
 
@@ -223,7 +222,7 @@ def main():
 
     print(f"Dataset size: {len(dataset)} samples")
 
-    # visualize_dataset(dataset, n=5)
+    visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -244,7 +243,7 @@ def main():
     batch_size = 32
     weight_decay = 0
     # Instantiate the operator using those variables
-    operator = DeepCatOperator(
+    operator = DeepCatOperator(y
         shapes=dataset.shapes, 
         device=device, 
         trunk_depth=trunk_depth, 
