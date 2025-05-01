@@ -1,9 +1,15 @@
-
+# Ignore all files in these folders, but keep the directories empty (via a tracked .gitkeep)
 runs/*
+!runs/.gitkeep
+
 result/*
+!result/.gitkeep
+
 datasets/*
-wandb/*
+!datasets/.gitkeep
+
 saved_models/*
-temp/*
+!saved_models/.gitkeep
+
 archive/*
-__pycache__/*
+!archive/.gitkeep

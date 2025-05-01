@@ -32,6 +32,10 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
 
     for i in range(num_samples):
         x,u,y,v = test_dataset[i]
+        print("u shape pred", u.shape)
+        print("x shape pred", x.shape)
+        print("v shape pred", v.shape)
+        print("y shape pred", y.shape)
         u_max = torch.max(u)
         u_min = torch.min(u)
         v_max = torch.max(v)
@@ -56,6 +60,7 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
 
         x_min = y[0].min()
         x_max = y[0].max()
+        print("prediction: u", u)
         
         ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
@@ -116,7 +121,7 @@ def visualize_dataset(dataset, n=1):
     indices = random.sample(range(len(dataset)), n)
     
     n_samples = len(indices)
-    n_cols = 3  # one column for x (observed points) and one for v (full field)
+    n_cols = 2  # one column for x (observed points) and one for v (full field)
     
     # Create a figure with one row per sample
     fig, axes = plt.subplots(n_samples, n_cols, figsize=(6 * n_cols, 4 * n_samples))
@@ -137,48 +142,37 @@ def visualize_dataset(dataset, n=1):
         print("y shape", y_sample.shape)
 
         # Remove channel dimension from v and get dimensions
-        v_field = v_sample.squeeze(0).cpu().numpy()  # shape: (H, W)
-        
+        print("u_sample", u_sample)
+        y_sample = y_sample.squeeze(0)  # shape: (H, W)
         # Get observed coordinates from x_sample
-        xx_coords = x_sample[0].cpu().numpy()  # column coordinates
-        xy_coords = x_sample[1].cpu().numpy()  # row coordinates
+        x_cols = x_sample[0].cpu().numpy()  # column coordinates
+        x_rows = x_sample[1].cpu().numpy()  # row coordinates
         
         # If coordinates are normalized to [0, 1], scale them to image dimensions
-        yx_coords = y_sample[0].cpu().numpy()  # column coordinates
-        yy_coords = y_sample[1].cpu().numpy()  # row coordinates
-
-        print("yx max", yx_coords.max(),"yy_cords_max", yy_coords.max())
-
+        y_rows = y_sample[0].cpu().numpy()  # column coordinates
+        y_cols = y_sample[1].cpu().numpy()  # row coordinates
 
         # --- Left subplot: Observed input (x) ---
         ax_input = axes[i, 0]
-        scatter_1 = ax_input.scatter(xx_coords, xy_coords, c=u_sample.cpu(), cmap='viridis',s=10)
+        scatter_1 = ax_input.scatter(x_cols, x_rows, c=u_sample.squeeze().cpu(), cmap='viridis', vmin=0, vmax=1)
+        ax_input.set_xlim(y_cols.min(), y_cols.max())
+        ax_input.set_ylim(y_rows.min(), y_rows.max())
         ax_input.set_aspect("equal")
         ax_input.set_title(f"Sample {idx}: U")
-        ax_input.set_xlabel("X index")
-        ax_input.set_ylabel("Y index")
         fig.colorbar(scatter_1, ax=ax_input)
         # Optionally, invert the y-axis to match image coordinate systems
-        
-        # --- Right subplot: Full temperature field (v) ---
-        ax_field = axes[i, 1]
-        im = ax_field.imshow(v_field, cmap='viridis', origin='lower')
-        ax_field.set_title(f"Sample {idx}: Full Temperature Field")
-        ax_field.set_xlabel("X index")
-        ax_field.set_ylabel("Y index")
-        fig.colorbar(im, ax=ax_field)
 
-        ax_y_sample = axes[i, 2]
-        scatter_2 = ax_y_sample.scatter(yx_coords, yy_coords, c=v_sample.cpu(), cmap="viridis", s=10)
+        ax_y_sample = axes[i, 1]
+        scatter_2 = ax_y_sample.scatter(y_cols, y_rows, c=v_sample.squeeze().cpu(), cmap="viridis", vmin=0, vmax=1)
         ax_y_sample.set_aspect("equal")
         ax_y_sample.set_title(f"Sample {idx}: V")
-        ax_y_sample.set_xlabel("X index")
-        ax_y_sample.set_ylabel("Y index")
 
-        cbar2 = fig.colorbar(scatter_2, ax=axes[i,2])
+        cbar2 = fig.colorbar(scatter_2, ax=axes[i,1])
         cbar2.set_label("v")
     
     plt.tight_layout()
+    plt.suptitle(f"Dataset Visualization: {n_samples} samples")
+    plt.savefig("dataset_visualization.png")
     plt.show()
 
 
@@ -206,14 +200,17 @@ def main():
     ############################################
 
     ############### CREATE OPERATOR DATASET ###############
-    num_samples = 1000
-    observed_fraction = 0.001
-    domain_fraction = 0.5
-    simulation_file = "simulation_n5000_t0299_t0.030_nx100_ny100.pt"
+    num_samples = 2000
+    observed_fraction = 0.0004
+    domain_fraction = 1
+    simulation_file = "0424_153319_simulation_n10000_t00.030_t0.030_nx100_ny100_din0.1_dout0.3_sy4_ey38_sx24_ex98.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
+    sensor_coordinates = torch.tensor([[0.2, 0.1], [0.4, 0.1], [0.6, 0.1], [0.8, 0.1]]).transpose(0, 1)
+    print("sensor coordinates", sensor_coordinates)
     dataset = OperatorFieldMappingDataset(
         num_samples=num_samples,
+        sensor_coordinates=sensor_coordinates,
         observed_fraction=observed_fraction, 
         domain_fraction=domain_fraction,
         simulation_file_path=simulation_file_path,
@@ -228,7 +225,7 @@ def main():
     
     print(f"Dataset size: {len(dataset)} samples")
 
-    # visualize_dataset(dataset, n=5)
+    visualize_dataset(dataset, n=5)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -241,11 +238,11 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 1000
-    trunk_depth = 8
-    branch_depth = 8
-    trunk_width = 32
-    branch_width = 32
+    epochs = 500
+    trunk_depth = 32
+    branch_depth = 32
+    trunk_width = 64
+    branch_width = 64
     batch_size = 32
     weight_decay = 0
     # Instantiate the operator using those variables

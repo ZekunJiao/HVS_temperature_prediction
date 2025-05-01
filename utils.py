@@ -80,7 +80,6 @@ def create_x(T_input, observed_fraction, domain_fraction):
 
     Returns:
         x (torch.Tensor): Tensor of shape (2, num_observed) containing the (col, row) coordinates.
-        u (torch.Tensor): Tensor of shape (num_observed,) containing the sampled field values.
     """
     device = T_input.device
     H, W = T_input.shape
@@ -106,4 +105,6 @@ def create_x(T_input, observed_fraction, domain_fraction):
     x = torch.stack([col_indices_norm, row_indices_norm])  # Shape: (2, num_observed)
     print("x shape", x.shape)
     return x
+
+
 

@@ -304,11 +304,21 @@ class OperatorFieldMappingDataset(OperatorDataset):
     def __init__(
         self, 
         num_samples,
+        sensor_coordinates, 
         observed_fraction, 
         domain_fraction, 
         simulation_file_path,
         save_path
     ):
+        '''
+        Args:
+            num_samples: Number of samples to generate.
+            sensor_coordinates: Coordinates of the sensors. (2, num_sensors) [row, col]
+            observed_fraction: Fraction of the field to be observed.
+            domain_fraction: Fraction of the domain to be observed.
+            simulation_file_path: Path to the simulation dataset file.
+            save_path: Path to save the generated dataset.
+        '''
         
         simulation_dataset = torch.load(simulation_file_path, map_location="cpu")
 
@@ -327,9 +337,13 @@ class OperatorFieldMappingDataset(OperatorDataset):
 
         h_grid, w_grid = torch.meshgrid(torch.linspace(0, 1, H), torch.linspace(0, 1, W), indexing="ij")
         # normalize the coordinates
-        y = torch.stack([h_grid, w_grid])
+        y = torch.stack([h_grid, w_grid]) # shape: (2, H, W)
 
-        x = create_x(T_input=inputs[0], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
+        if sensor_coordinates is not None:
+            # Use the provided sensor coordinates
+            x = sensor_coordinates
+        else:
+            x = create_x(T_input=inputs[0], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
 
         for i in range(num_samples):
             cols = (x[0] * (W - 1)).round().long()  # x[0] → columns, scale by W-1
@@ -346,7 +360,7 @@ class OperatorFieldMappingDataset(OperatorDataset):
             u = (u - u_min) / (u_max- u_min)
             v = (v - v_min) / (v_max - v_min)
 
-            ######## plotting ##########
+            ####### plotting ##########
             # fig, ax = plt.subplots(1, 4, figsize=(20, 6))
 
             # scatter_1 = ax[0].scatter(
@@ -354,6 +368,8 @@ class OperatorFieldMappingDataset(OperatorDataset):
             #     x[1].cpu(),
             #     c=u.cpu(), 
             #     cmap="viridis", 
+            #     vmin=0,
+            #     vmax=1,
             # )
             # ax[0].set_aspect("equal")
             # cbar1 = fig.colorbar(scatter_1, ax=ax[0])
@@ -363,6 +379,8 @@ class OperatorFieldMappingDataset(OperatorDataset):
             #     y[1].cpu(), 
             #     y[0].cpu(),
             #     c=v.cpu(), 
+            #     vmin=0,
+            #     vmax=1,
             #     cmap="viridis", 
             # )
             # ax[1].set_aspect("equal")
@@ -372,7 +390,9 @@ class OperatorFieldMappingDataset(OperatorDataset):
             # im_1 = ax[2].imshow(
             #     inputs[i],
             #     cmap="viridis", 
-            #     origin="lower"
+            #     origin="lower",
+            #     vmin=0,
+            #     vmax=1,
             # )
             # ax[2].set_aspect("equal")
             # cbar4 = fig.colorbar(im_1, ax=ax[2])
@@ -381,7 +401,9 @@ class OperatorFieldMappingDataset(OperatorDataset):
             # im_2 = ax[3].imshow(
             #     outputs[i],
             #     cmap="viridis", 
-            #     origin="lower"
+            #     origin="lower",
+            #     vmin=0,
+            #     vmax=1,
             # )
             # ax[3].set_aspect("equal")
             # cbar4 = fig.colorbar(im_2, ax=ax[3])
@@ -390,7 +412,7 @@ class OperatorFieldMappingDataset(OperatorDataset):
             # plt.tight_layout()
             # plt.savefig(f"./temp.png")
             # plt.show()
-            ####### end plotting ########
+            ###### end plotting ########
             u_data.append(u)
             v_data.append(v)    
 
