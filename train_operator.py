@@ -200,7 +200,7 @@ def main():
     ############################################
 
     ############### CREATE OPERATOR DATASET ###############
-    num_samples = 2000
+    num_samples = 3000
     observed_fraction = 0.0004
     domain_fraction = 1
     simulation_file = "0424_153319_simulation_n10000_t00.030_t0.030_nx100_ny100_din0.1_dout0.3_sy4_ey38_sx24_ex98.pt"
@@ -238,11 +238,11 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 500
-    trunk_depth = 32
-    branch_depth = 32
-    trunk_width = 64
-    branch_width = 64
+    epochs = 4000
+    trunk_depth = 16
+    branch_depth = 16
+    trunk_width = 32
+    branch_width = 32
     batch_size = 32
     weight_decay = 0
     # Instantiate the operator using those variables
