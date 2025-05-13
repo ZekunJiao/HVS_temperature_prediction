@@ -300,6 +300,39 @@ class SimulationDataset(td.Dataset):
         return self.inputs.shape[0]
 
 
+class FullSimulationDataset(td.Dataset):
+    def __init__(      
+        self, 
+        num_simulations, 
+        nx, ny, dx, dy, nt, dt, 
+        d_in, d_out,
+        start_x, start_y, end_x, end_y,
+        noise_amplitude, 
+        device,
+        save_path
+    ):
+        
+        super().__init__()
+        data = []
+        for i in range(num_simulations):
+            print(f"generating simulation {i}")
+            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt,
+                                           d_in=d_in, d_out=d_out,
+                                             start_x=start_x, end_x=end_x, start_y=start_y, end_y=end_y,
+                                            noise_amplitude=noise_amplitude, device=device)
+            data.append(T_series.cpu())
+            del T_series
+            torch.cuda.empty_cache()
+        self.data = torch.stack(data)
+        torch.save(self.data, save_path)
+
+    def __getitem__(self, index): 
+        return (self.data[index], self.data[index])
+
+    def __len__(self):
+        return self.data.shape[0]
+
+
 class OperatorFieldMappingDataset(OperatorDataset):
     def __init__(
         self, 
@@ -442,7 +475,7 @@ if __name__ == "__main__":
 
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 10000
+    num_simulations = 10
     nt = 300
     t0 = nt - 1
     d_in = 0.1
@@ -472,7 +505,7 @@ if __name__ == "__main__":
     plt.savefig("diffusion_coefficient.png")
     plt.show()
 
-    simulation_dataset = SimulationDataset(
+    simulation_dataset = FullSimulationDataset(
         num_simulations=num_simulations,
         nx=nx,
         ny=ny,
@@ -488,7 +521,7 @@ if __name__ == "__main__":
         dt=dt,
         noise_amplitude=noise_amplitude,
         device=device,
-        t0=t0,
+        # t0=t0,
         save_path=save_path_simulation
     )
     # ######################################################
