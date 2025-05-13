@@ -31,8 +31,6 @@ def calibrate_diffusivity(
     for epoch in range(epochs):
         # Build diffusivity map for this iteration
         D = torch.ones((ny, nx), device=device) * d_out
-        print(D.shape)
-        print(f"start_x: {start_x}, end_x: {end_x}, start_y: {start_y}, end_y: {end_y}")
         D[start_x:end_x, start_y:end_y] = d_in
         
         # Simulate forward using RK4
@@ -60,25 +58,29 @@ def calibrate_diffusivity(
 
 
 
-def main():
+if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     simulation_file_name = "0513_112407_simulation_n10_t00.030_t0.030_nx100_ny100_din0.1_dout0.3_sy1_ey63_sx44_ex89.pt"
     
     T_obs = torch.load(f'./datasets/simulation/{simulation_file_name}').to(device)
 
-    pattern = r"_sy(\d+)_ey(\d+)_sx(\d+)_ex(\d+)"
+    pattern = r"din(\d+\.\d+)_dout(\d+\.\d+)_sy(\d+)_ey(\d+)_sx(\d+)_ex(\d+)"
     match = re.search(pattern, simulation_file_name)
 
     if match:
-        sy = int(match.group(1))
-        sx = int(match.group(3))
-        print(f"Extracted values:\nstart_y (sy) = {sy}\nstart_x (sx) = {sx}")
+        din = float(match.group(1))
+        dout = float(match.group(2))
+        sy = int(match.group(3))
+        ey = int(match.group(4))
+        sx = int(match.group(5))
+        ex = int(match.group(6))
+        print(f"Extracted values:\ndin = {din}\ndout = {dout}\nstart_y (sy) = {sy}\nend_y (ey) = {ey}\nstart_x (sx) = {sx}\nend_x (ex) = {ex}")
     else:
         print("Pattern not found in filename.")
     
     d_in_est, d_out_est, training_losses = calibrate_diffusivity(
         T_obs, dx=0.01, dy=0.01, dt=5e-5,
-        start_x=20, start_y=20, end_x=70, end_y=70,
+        start_x=sx, start_y=sy, end_x=ex, end_y=ey,
         device=device
     )
 
