@@ -3,7 +3,7 @@ import torch
 import random
 from torch.utils.data import Dataset
 from utils import create_masked_input, create_x
-from simulation import simulate_simulation
+from simulation import create_blob_diffusivity, simulate_simulation
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -304,9 +304,7 @@ class FullSimulationDataset(td.Dataset):
     def __init__(      
         self, 
         num_simulations, 
-        nx, ny, dx, dy, nt, dt, 
-        d_in, d_out,
-        start_x, start_y, end_x, end_y,
+        nx, ny, dx, dy, nt, dt, D,
         noise_amplitude, 
         device,
         save_path
@@ -316,10 +314,20 @@ class FullSimulationDataset(td.Dataset):
         data = []
         for i in range(num_simulations):
             print(f"generating simulation {i}")
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt,
-                                           d_in=d_in, d_out=d_out,
-                                             start_x=start_x, end_x=end_x, start_y=start_y, end_y=end_y,
+            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt,D=D,
                                             noise_amplitude=noise_amplitude, device=device)
+
+            # Display T_series at nt/2
+            mid_step = nt // 2
+            plt.figure()
+            plt.imshow(T_series[mid_step].cpu().numpy(), cmap='viridis', origin='lower')
+            plt.colorbar(label="Temperature")
+            plt.title(f"Temperature Field at time step {mid_step} (nt/2)")
+            plt.xlabel("X index")
+            plt.ylabel("Y index")
+            plt.savefig(f"simulation_frame_at_nt_half_sim_{i}.png") # Save the figure
+            plt.close() # Close the figure to free memory
+            
             data.append(T_series.cpu())
             del T_series
             torch.cuda.empty_cache()
@@ -478,8 +486,8 @@ if __name__ == "__main__":
     num_simulations = 10
     nt = 300
     t0 = nt - 1
-    d_in = 0.1
-    d_out = 0.3
+    d_min = 0.1
+    d_max = 0.3
     start_y = random.randint(0, int(nx / 2) - 1)
     end_y = random.randint(start_y, nx - 1)    
     start_x = random.randint(0, int(ny / 2) - 1)
@@ -490,15 +498,18 @@ if __name__ == "__main__":
 
     save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
                                         f"{timestamp}_simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}"
-                                        f"_dt{dt}_din{d_in}_dout{d_out}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
+                                        f"_dt{dt}_dmin{d_min}_dmax{d_max}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
     
     print(save_path_simulation)
     if not os.path.exists(os.path.dirname(save_path_simulation)):
         print("no such path")
         exit()
     
-    D = torch.full((ny, nx), d_out, device=device)
-    D[start_y:end_y, start_x:end_x] = d_in
+    D = torch.full((ny, nx), d_max, device=device)
+    D[start_y:end_y, start_x:end_x] = d_min
+    
+    D = create_blob_diffusivity(ny=ny, nx=nx, d_min=d_min, d_max=d_max, n_blobs=5, radius=20, device=device)
+
     plt.figure(figsize=(6, 5))
     plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
     plt.colorbar(label='Diffusion Coefficient')
@@ -511,17 +522,11 @@ if __name__ == "__main__":
         ny=ny,
         dx=dx,
         dy=dy,
-        d_in=d_in,
-        d_out=d_out,
-        start_x=start_x,
-        start_y=start_y,
-        end_x=end_x,
-        end_y=end_y,
+        D=D,
         nt=nt,
         dt=dt,
         noise_amplitude=noise_amplitude,
         device=device,
-        # t0=t0,
         save_path=save_path_simulation
     )
     # ######################################################
