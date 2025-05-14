@@ -64,7 +64,7 @@ def simulate_simulation(nx, ny, dx, dy, nt, dt, d_in, d_out, start_y, end_y, sta
 
     # diffusion coefficient (same shape as one slice)
     D = torch.full((ny, nx), d_out, device=device)
-    D[start_x:end_x, start_y:end_y] = d_in
+    D[start_y:end_y, start_x:end_x] = d_in
     # plt.figure(figsize=(6, 5))
     # plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
     # plt.colorbar(label='Diffusion Coefficient')

@@ -31,7 +31,7 @@ def calibrate_diffusivity(
     for epoch in range(epochs):
         # Build diffusivity map for this iteration
         D = torch.ones((ny, nx), device=device) * d_out
-        D[start_x:end_x, start_y:end_y] = d_in
+        D[start_y:end_y, start_x:end_x] = d_in
         
         # Simulate forward using RK4
         T = torch.empty_like(T_obs)
@@ -60,26 +60,27 @@ def calibrate_diffusivity(
 
 if __name__ == "__main__":
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    simulation_file_name = "0513_112407_simulation_n10_t00.030_t0.030_nx100_ny100_din0.1_dout0.3_sy1_ey63_sx44_ex89.pt"
+    simulation_file_name = "0514_122331_simulation_n10_t00.015_t0.015_nx100_ny100_dt5e-05_din0.1_dout0.3_sy44_ey80_sx23_ex39.pt"
     
     T_obs = torch.load(f'./datasets/simulation/{simulation_file_name}').to(device)
 
-    pattern = r"din(\d+\.\d+)_dout(\d+\.\d+)_sy(\d+)_ey(\d+)_sx(\d+)_ex(\d+)"
+    pattern = r"dt([0-9.eE+-]+)_din(\d+\.\d+)_dout(\d+\.\d+)_sy(\d+)_ey(\d+)_sx(\d+)_ex(\d+)"
     match = re.search(pattern, simulation_file_name)
 
     if match:
-        din = float(match.group(1))
-        dout = float(match.group(2))
-        sy = int(match.group(3))
-        ey = int(match.group(4))
-        sx = int(match.group(5))
-        ex = int(match.group(6))
-        print(f"Extracted values:\ndin = {din}\ndout = {dout}\nstart_y (sy) = {sy}\nend_y (ey) = {ey}\nstart_x (sx) = {sx}\nend_x (ex) = {ex}")
+        dt = float(match.group(1))
+        din = float(match.group(2))
+        dout = float(match.group(3))
+        sy = int(match.group(4))
+        ey = int(match.group(5))
+        sx = int(match.group(6))
+        ex = int(match.group(7))
+        print(f"Extracted values:\ndt = {dt}\ndin = {din}\ndout = {dout}\nstart_y (sy) = {sy}\nend_y (ey) = {ey}\nstart_x (sx) = {sx}\nend_x (ex) = {ex}")
     else:
         print("Pattern not found in filename.")
     
     d_in_est, d_out_est, training_losses = calibrate_diffusivity(
-        T_obs, dx=0.01, dy=0.01, dt=5e-5,
+        T_obs, dx=0.01, dy=0.01, dt=dt,
         start_x=sx, start_y=sy, end_x=ex, end_y=ey,
         device=device
     )

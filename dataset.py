@@ -484,13 +484,13 @@ if __name__ == "__main__":
     end_y = random.randint(start_y, nx - 1)    
     start_x = random.randint(0, int(ny / 2) - 1)
     end_x = random.randint(start_x, ny - 1)
-    dt = 0.0001
+    dt = 5e-5
     timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
     noise_amplitude = 0.0
 
     save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
                                         f"{timestamp}_simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}"
-                                        f"_din{d_in}_dout{d_out}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
+                                        f"_dt{dt}_din{d_in}_dout{d_out}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
     
     print(save_path_simulation)
     if not os.path.exists(os.path.dirname(save_path_simulation)):
@@ -498,7 +498,7 @@ if __name__ == "__main__":
         exit()
     
     D = torch.full((ny, nx), d_out, device=device)
-    D[start_x:end_x, start_y:end_y] = d_in
+    D[start_y:end_y, start_x:end_x] = d_in
     plt.figure(figsize=(6, 5))
     plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
     plt.colorbar(label='Diffusion Coefficient')
