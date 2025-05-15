@@ -300,45 +300,47 @@ class SimulationDataset(td.Dataset):
         return self.inputs.shape[0]
 
 
-class FullSimulationDataset(td.Dataset):
-    def __init__(      
-        self, 
-        num_simulations, 
-        nx, ny, dx, dy, nt, dt, D,
-        noise_amplitude, 
+class FullSimulationDataset(Dataset):
+    def __init__(
+        self,
+        num_simulations,
+        nx, ny, dx, dy, nt, dt,
+        D,  # full (ny, nx) diffusivity map to use for all sims
+        noise_amplitude,
         device,
-        save_path
+        save_path=None
     ):
-        
         super().__init__()
-        data = []
+        self.device = device
+
+        # Pre‐allocate a tensor to hold all simulations
+        all_T = torch.empty((num_simulations, nt, ny, nx), device=device)
         for i in range(num_simulations):
-            print(f"generating simulation {i}")
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt,D=D,
-                                            noise_amplitude=noise_amplitude, device=device)
+            print(f"  Generating simulation {i+1}/{num_simulations}")
+            all_T[i] = simulate_simulation(
+                nx, ny, dx, dy, nt, dt,
+                noise_amplitude=noise_amplitude,
+                device=device,
+                D=D                       # your custom full-map
+            )
 
-            # Display T_series at nt/2
-            mid_step = nt // 2
-            plt.figure()
-            plt.imshow(T_series[mid_step].cpu().numpy(), cmap='viridis', origin='lower')
-            plt.colorbar(label="Temperature")
-            plt.title(f"Temperature Field at time step {mid_step} (nt/2)")
-            plt.xlabel("X index")
-            plt.ylabel("Y index")
-            plt.savefig(f"simulation_frame_at_nt_half_sim_{i}.png") # Save the figure
-            plt.close() # Close the figure to free memory
-            
-            data.append(T_series.cpu())
-            del T_series
-            torch.cuda.empty_cache()
-        self.data = torch.stack(data)
-        torch.save(self.data, save_path)
+        self.T = all_T.cpu()  # keep data on CPU for DataLoader
+        self.D = D.clone().cpu()
 
-    def __getitem__(self, index): 
-        return (self.data[index], self.data[index])
+        if save_path is not None:
+            torch.save({"T": self.T, "D": self.D}, save_path)
 
     def __len__(self):
-        return self.data.shape[0]
+        # Number of simulated runs in the dataset
+        return self.T.shape[0]
+
+    def __getitem__(self, idx):
+        """
+        Returns:
+          T_i: Tensor of shape (nt, ny, nx)
+          D  : Tensor of shape (ny, nx)
+        """
+        return self.T[idx], self.D
 
 
 class OperatorFieldMappingDataset(OperatorDataset):
@@ -484,7 +486,7 @@ if __name__ == "__main__":
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
     num_simulations = 10
-    nt = 300
+    nt = 400
     t0 = nt - 1
     d_min = 0.1
     d_max = 0.3
@@ -495,10 +497,12 @@ if __name__ == "__main__":
     dt = 5e-5
     timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
     noise_amplitude = 0.0
+    n_blobs = 20
+    radius = 30
 
     save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
-                                        f"{timestamp}_simulation_n{num_simulations}_t0{t0*dt:.3f}_t{nt*dt:.3f}_nx{nx}_ny{ny}"
-                                        f"_dt{dt}_dmin{d_min}_dmax{d_max}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}.pt")
+                                        f"{timestamp}_simulation_n{num_simulations}_nx{nx}_ny{ny}"
+                                        f"_dt{dt}_dmin{d_min}_dmax{d_max}_nblobs{n_blobs}_radius{radius}.pt")
     
     print(save_path_simulation)
     if not os.path.exists(os.path.dirname(save_path_simulation)):
@@ -508,7 +512,7 @@ if __name__ == "__main__":
     D = torch.full((ny, nx), d_max, device=device)
     D[start_y:end_y, start_x:end_x] = d_min
     
-    D = create_blob_diffusivity(ny=ny, nx=nx, d_min=d_min, d_max=d_max, n_blobs=5, radius=20, device=device)
+    D = create_blob_diffusivity(ny=ny, nx=nx, d_min=d_min, d_max=d_max, n_blobs=n_blobs, radius=radius, device=device)
 
     plt.figure(figsize=(6, 5))
     plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
