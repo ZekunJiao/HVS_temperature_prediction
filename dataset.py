@@ -497,8 +497,8 @@ if __name__ == "__main__":
     dt = 5e-5
     timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
     noise_amplitude = 0.0
-    n_blobs = 20
-    radius = 30
+    n_blobs = 200
+    radius = 5
 
     save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
                                         f"{timestamp}_simulation_n{num_simulations}_nx{nx}_ny{ny}"

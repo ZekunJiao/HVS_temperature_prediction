@@ -96,7 +96,7 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
     
     current_time = datetime.now().strftime("%m%d_%H%M%S")
-    simulation_file_name = "0514_202854_simulation_n10_nx100_ny100_dt5e-05_dmin0.1_dmax0.3_nblobs20_radius30.pt"
+    simulation_file_name = "0515_085547_simulation_n10_nx100_ny100_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
 
     data = torch.load(f'./datasets/simulation/{simulation_file_name}')
     T_obs_full = data['T'].to(device) # Keep original name for clarity before slicing
