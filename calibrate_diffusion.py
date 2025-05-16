@@ -77,6 +77,7 @@ def calibrate_diffusivity(
         # if loss.item() < 5e-6 and epoch > 10: # ensure some epochs run
         #     print(f"Stopping early at epoch {epoch+1} due to low loss.")
         #     break
+
         
     # Reconstruct final D_pred with optimized d_regs for returning (and plotting)
     if calibrate_per_gridpoint:
@@ -96,7 +97,11 @@ if __name__ == "__main__":
     print(f"Using device: {device}")
     
     current_time = datetime.now().strftime("%m%d_%H%M%S")
+<<<<<<< HEAD
     simulation_file_name = "0515_161447_simulation_n10_nx100_ny100_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
+=======
+    simulation_file_name = "0515_085547_simulation_n10_nx100_ny100_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
+>>>>>>> 9119369848f4f3ee8f4c1e45cd0b860cb36b91fe
 
     data = torch.load(f'./datasets/simulation/{simulation_file_name}')
     T_obs_full = data['T'].to(device) # Keep original name for clarity before slicing
@@ -120,7 +125,11 @@ if __name__ == "__main__":
         T_obs_full, dx=0.01, dy=0.01, dt=dt_val, 
         D=D_ground_truth, # Used only if run_per_gridpoint_mode is False
         d_init=0.15, 
+<<<<<<< HEAD
         epochs=300,  
+=======
+        epochs=100,  
+>>>>>>> 9119369848f4f3ee8f4c1e45cd0b860cb36b91fe
         lr=0.01,     
         device=device,
         calibrate_per_gridpoint=run_per_gridpoint_mode
@@ -149,7 +158,11 @@ if __name__ == "__main__":
     # Visualize D_ground_truth and D_pred_final
     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
     mode_string_for_suptitle = 'Per-Gridpoint' if run_per_gridpoint_mode else 'Per-Region'
+<<<<<<< HEAD
     fig.suptitle(f'Diffusivity Maps (Mode: {mode_string_for_suptitle}), final loss {training_losses[-1]}')
+=======
+    fig.suptitle(f'Diffusivity Maps (Mode: {mode_string_for_suptitle})')
+>>>>>>> 9119369848f4f3ee8f4c1e45cd0b860cb36b91fe
 
     # Determine global min and max for consistent color scaling
     d_min = min(D_ground_truth.min(), D_pred_final_tensor.min()).item()

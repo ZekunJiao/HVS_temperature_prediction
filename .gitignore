@@ -19,3 +19,4 @@ saved_models/**  # ignore files in saved_models/
 notebooks/*
 
 simulation_data_bernd/*
+

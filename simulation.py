@@ -124,10 +124,16 @@ if __name__ == "__main__":
     plt.figure(figsize=(6, 5))
     plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
     plt.colorbar(label='Diffusion Coefficient')
+<<<<<<< HEAD
     plt.savefig("./D.png")
     plt.show()  
     
     T = simulate_simulation(nx=nx, ny=ny, dx=dx, dy=dy, nt=nt, dt=dt, D=D, noise_amplitude=0.2, device=device)
+=======
+    plt.show()  
+    
+    T = simulate_simulation(nx=nx, ny=ny, dx=dx, dy=dy, nt=nt, dt=dt, D=D, noise_amplitude=0.0, device=device)
+>>>>>>> 9119369848f4f3ee8f4c1e45cd0b860cb36b91fe
 
     # show initial condition
     plt.figure(figsize=(6,5))
@@ -143,7 +149,11 @@ if __name__ == "__main__":
     from matplotlib import animation
 
     fig, ax = plt.subplots(figsize=(8,6))
+<<<<<<< HEAD
     vmin, vmax = 0.25, 1.25
+=======
+    vmin, vmax = T.min().item(), T.max().item()
+>>>>>>> 9119369848f4f3ee8f4c1e45cd0b860cb36b91fe
     img = ax.imshow(T[0].cpu().numpy(), cmap='viridis',
                     origin='lower', vmin=vmin, vmax=vmax)
     cbar = plt.colorbar(img, ax=ax)
