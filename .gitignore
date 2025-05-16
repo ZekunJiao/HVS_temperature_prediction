@@ -1,0 +1,21 @@
+# ignore everything under runs/, but keep the top-level gitkeep
+/runs/**
+!/runs/.gitkeep
+
+# ignore everything under result/, but keep the top-level gitkeep
+/result/**
+!/result/.gitkeep
+
+# ignore everything under datasets/
+/datasets/**
+# except these two placeholders:
+!/datasets/.gitkeep
+!/datasets/simulation/.gitkeep
+
+
+saved_models/**  # ignore files in saved_models/
+!saved_models/.gitkeep
+
+notebooks/*
+
+simulation_data_bernd/*
