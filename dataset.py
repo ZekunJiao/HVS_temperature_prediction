@@ -482,10 +482,6 @@ if __name__ == "__main__":
     os.chdir(script_dir)  # Set script directory as working directory
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-<<<<<<< HEAD
-=======
-
->>>>>>> 9119369848f4f3ee8f4c1e45cd0b860cb36b91fe
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
     num_simulations = 10
@@ -499,11 +495,7 @@ if __name__ == "__main__":
     end_x = random.randint(start_x, ny - 1)
     dt = 5e-5
     timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
-<<<<<<< HEAD
-    noise_amplitude = 0.2
-=======
     noise_amplitude = 0.0
->>>>>>> 9119369848f4f3ee8f4c1e45cd0b860cb36b91fe
     n_blobs = 200
     radius = 5
 
