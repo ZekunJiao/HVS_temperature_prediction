@@ -11,7 +11,7 @@ from datetime import datetime
 from torch.utils.data import DataLoader
 
 from torch.utils.tensorboard import SummaryWriter
-from dataset import OperatorTemperatureDataset, OperatorFieldMappingDataset
+from datasets.dataset import OperatorTemperatureDataset, OperatorFieldMappingDataset
 from continuiti.trainer.scheduler import LinearLRScheduler
 from continuiti.trainer.callbacks import PrintTrainingLoss, Logs
 import math
@@ -204,7 +204,7 @@ def main():
     observed_fraction = 0.0004
     domain_fraction = 1
     simulation_file = "0424_153319_simulation_n10000_t00.030_t0.030_nx100_ny100_din0.1_dout0.3_sy4_ey38_sx24_ex98.pt"
-    simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
+    simulation_file_path = os.path.join(script_dir, "..", "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     sensor_coordinates = torch.tensor([[0.2, 0.1], [0.4, 0.1], [0.6, 0.1], [0.8, 0.1]]).transpose(0, 1)
     print("sensor coordinates", sensor_coordinates)

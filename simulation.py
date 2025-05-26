@@ -1,6 +1,6 @@
 import torch
 import random
-from utils import rk4_step
+from common.utils import rk4_step
 import matplotlib.pyplot as plt
 import os
 

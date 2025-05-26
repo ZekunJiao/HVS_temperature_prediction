@@ -1,10 +1,10 @@
 import torch
 import torch.nn.functional as F
-from utils import rk4_step
+from common.utils import rk4_step
 import re
 import matplotlib.pyplot as plt
 from datetime import datetime
-from pinn import PINNNet, pde_loss_heat_equation_normalized_inputs
+from models.pinn import PINNNet, pde_loss_heat_equation_normalized_inputs
 
 def calibrate_diffusivity(
     T_obs,           # Tensor of shape (nt, ny, nx): observed temperature data
@@ -277,13 +277,13 @@ if __name__ == "__main__":
         print("\n--- Using PINN-based Calibration ---")
         # Ensure T_obs_full[0] is used, which is (nt, ny, nx)
         # D_ground_truth is used for region definition if not per-gridpoint
-        d_params_pinn, losses_pinn, D_pred_pinn_tensor = calibrate_diffusivity_pinn(
+        d_params_pinn, losses_pinn, D_pred_final_tensor = calibrate_diffusivity_pinn (
             T_obs=T_obs_full[0], # Use the first frame: (nt, ny, nx)
             dx=0.01, dy=0.01, dt=dt_val,
             D_gt_for_regions=D_ground_truth, # Used only if run_per_gridpoint_mode is False
             d_init=0.15,
             lr=1e-4, # PINNs often require smaller LR for joint optimization
-            epochs=20, # PINNs might need more epochs
+            epochs=1000, # PINNs might need more epochs
             device=device,
             calibrate_per_gridpoint=run_per_gridpoint_mode,
             pinn_layers=[3, 40, 40, 40, 40, 1], # Example layers
@@ -291,13 +291,11 @@ if __name__ == "__main__":
             lambda_pde=0.1 # Adjust PDE loss weight as needed
         )
         training_losses = losses_pinn[0] # Total loss for plotting
-        D_pred_final_tensor = D_pred_pinn_tensor
         d_regs_est_numpy = d_params_pinn
         print("PINN calibration finished.")
-
     else:
         print("\n--- Using Original RK4-based Calibration ---")
-        d_regs_est_numpy, training_losses, D_pred_final_tensor = calibrate_diffusivity(
+        d_regs_est_numpy, training_losses, D_pred_final_tensor = calibrate_diffusivity (
             T_obs_full, dx=0.01, dy=0.01, dt=dt_val, 
             D=D_ground_truth, # Used only if run_per_gridpoint_mode is False
             d_init=0.15, 
@@ -327,7 +325,7 @@ if __name__ == "__main__":
     plt.yscale('log')
     plt.savefig(f'./result/diffusion_calibration/Loss_{current_time}_{calibration_method}_{mode_string}_{simulation_file_name}.png')
     plt.close() # Close loss plot figure
-
+    print(D_pred_final_tensor)
     # Visualize D_ground_truth and D_pred_final
     fig, axs = plt.subplots(1, 2, figsize=(12, 5))
     mode_string_for_suptitle = 'Per-Gridpoint' if run_per_gridpoint_mode else 'Per-Region'
