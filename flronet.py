@@ -7,8 +7,9 @@ import torch.nn.functional as F
 
 class SpectralConv2d(nn.Module):
 
-    def __init__(self, embedding_dim: int, n_hmodes: int, n_wmodes: int):
+    def __init__(self, embedding_dim: int, n_hmodes: int, n_wmodes: int, device: str = None):
         super().__init__()
+        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.embedding_dim: int = embedding_dim
         self.n_hmodes: int = n_hmodes
         self.n_wmodes: int = n_wmodes
@@ -30,8 +31,8 @@ class SpectralConv2d(nn.Module):
         padded_input: torch.Tensor = F.pad(input=input, pad=(0, padded_W - W, 0, padded_H - H), mode='constant', value=0)
         # FFT
         fourier_coeff: torch.Tensor = torch.fft.rfft2(padded_input, dim=(2, 3), norm="ortho")
-        output_real = torch.zeros((n_frames, embedding_dim, H, W), device='cuda')
-        output_imag = torch.zeros((n_frames, embedding_dim, H, W), device='cuda')
+        output_real = torch.zeros((n_frames, embedding_dim, H, W), device=self.device)
+        output_imag = torch.zeros((n_frames, embedding_dim, H, W), device=self.device)
 
         pos_freq_slice: Tuple[slice, slice, slice, slice] = (
             slice(None), slice(None), slice(None, self.n_hmodes), slice(None, self.n_wmodes)
@@ -80,8 +81,9 @@ class SpectralConv2d(nn.Module):
 
 class FNOBranchNet(nn.Module):
 
-    def __init__(self, n_channels: int, n_fno_layers: int, n_hmodes: int, n_wmodes: int, embedding_dim: int):
+    def __init__(self, n_channels: int, n_fno_layers: int, n_hmodes: int, n_wmodes: int, embedding_dim: int, device: str = None):
         super().__init__()
+        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.n_channels: int = n_channels
         self.n_fno_layers: int = n_fno_layers
         self.n_hmodes: int = n_hmodes
@@ -96,7 +98,7 @@ class FNOBranchNet(nn.Module):
             nn.Linear(in_features=256, out_features=embedding_dim),
         )
         self.spectral_conv_layers = nn.ModuleList(
-            modules=[SpectralConv2d(embedding_dim=embedding_dim, n_hmodes=n_hmodes, n_wmodes=n_wmodes) for _ in range(n_fno_layers)]
+            modules=[SpectralConv2d(embedding_dim=embedding_dim, n_hmodes=n_hmodes, n_wmodes=n_wmodes, device=self.device) for _ in range(n_fno_layers)]
         )
         self.Ws = nn.ModuleList(
             modules=[
@@ -140,8 +142,9 @@ class FNOBranchNet(nn.Module):
 
 class UNetBranchNet(nn.Module):
 
-    def __init__(self, n_channels: int, embedding_dim: int):
+    def __init__(self, n_channels: int, embedding_dim: int, device: str = None):
         super().__init__()
+        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.n_channels: int = n_channels
         self.embedding_dim: int = embedding_dim
         # Encoder
@@ -206,8 +209,9 @@ class UNetBranchNet(nn.Module):
 
 class MLPBranchNet(nn.Module):
 
-    def __init__(self, n_channels: int, embedding_dim: int, n_sensors: int, resolution: Tuple[int, int]):
+    def __init__(self, n_channels: int, embedding_dim: int, n_sensors: int, resolution: Tuple[int, int], device: str = None):
         super().__init__()
+        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.n_channels: int = n_channels
         self.embedding_dim: int = embedding_dim
         self.n_sensors: int = n_sensors
@@ -253,14 +257,15 @@ class MLPBranchNet(nn.Module):
 
 class SinusoidEmbedding(nn.Module):
 
-    def __init__(self, embedding_dim: int):
+    def __init__(self, embedding_dim: int, device: str = None):
         super().__init__()
+        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.embedding_dim: int = embedding_dim
 
         # Frequency scaling
         self.w = 1. / torch.pow(
-            input=torch.tensor(10_000., dtype=torch.float, device='cuda'),
-            exponent=torch.arange(0, embedding_dim, 2, dtype=torch.float, device='cuda') / embedding_dim,
+            input=torch.tensor(10_000., dtype=torch.float, device=self.device),
+            exponent=torch.arange(0, embedding_dim, 2, dtype=torch.float, device=self.device) / embedding_dim,
         )
         assert self.w.shape == (embedding_dim // 2,)
 
@@ -268,7 +273,7 @@ class SinusoidEmbedding(nn.Module):
         assert timeframes.ndim == 2
         batch_size, n_timeframes = timeframes.shape
         timeframes = timeframes.unsqueeze(-1)  # (batch_size, n_timeframes, 1)
-        sinusoid = torch.zeros(*timeframes.shape[:-1], self.embedding_dim, device='cuda')
+        sinusoid = torch.zeros(*timeframes.shape[:-1], self.embedding_dim, device=self.device)
         sinusoid[:, :, 0::2] = torch.sin(timeframes * self.w)
         sinusoid[:, :, 1::2] = torch.cos(timeframes * self.w)
         assert sinusoid.shape == (batch_size, n_timeframes, self.embedding_dim)
@@ -277,8 +282,9 @@ class SinusoidEmbedding(nn.Module):
 
 class TrunkNet(nn.Module):
 
-    def __init__(self, embedding_dim: int, n_outputs: int):
+    def __init__(self, embedding_dim: int, n_outputs: int, device: str = None):
         super().__init__()
+        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.embedding_dim: int = embedding_dim
         self.n_outputs: int = n_outputs
         self.mlps = nn.ModuleList(
@@ -314,14 +320,15 @@ class TrunkNet(nn.Module):
 
 class _BaseFLRONet(nn.Module):
 
-    def __init__(self, n_channels: int, embedding_dim: int, n_stacked_networks: int):
+    def __init__(self, n_channels: int, embedding_dim: int, n_stacked_networks: int, device: str = None):
         super().__init__()
+        self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.n_channels: int = n_channels
         self.embedding_dim: int = embedding_dim
         self.n_stacked_networks: int = n_stacked_networks
         # Trunk net
-        self.sinusoid_embedding = SinusoidEmbedding(embedding_dim=embedding_dim)
-        self.trunk_net = TrunkNet(embedding_dim=embedding_dim, n_outputs=n_stacked_networks)
+        self.sinusoid_embedding = SinusoidEmbedding(embedding_dim=embedding_dim, device=self.device)
+        self.trunk_net = TrunkNet(embedding_dim=embedding_dim, n_outputs=n_stacked_networks, device=self.device)
         self.bias = nn.Parameter(data=torch.randn(n_channels, 1, 1))
 
     def forward(
@@ -375,7 +382,7 @@ class _BaseFLRONet(nn.Module):
         # Fusing (Product)
         output: torch.Tensor = torch.zeros(
             batch_size, n_fullstate_timeframes, self.n_channels, out_H, out_W,
-            device='cuda'
+            device=self.device
         )
         for i in range(self.n_stacked_networks):
             output += torch.einsum('nschw,nsf->nfchw', branch_outputs[i], trunk_outputs[i])
@@ -401,9 +408,9 @@ class FLRONetFNO(_BaseFLRONet):
     def __init__(
         self,
         n_channels: int, n_fno_layers: int, n_hmodes: int, n_wmodes: int, 
-        embedding_dim: int, n_stacked_networks: int,
+        embedding_dim: int, n_stacked_networks: int, device: str = None,
     ):
-        super().__init__(n_channels=n_channels, embedding_dim=embedding_dim, n_stacked_networks=n_stacked_networks)
+        super().__init__(n_channels=n_channels, embedding_dim=embedding_dim, n_stacked_networks=n_stacked_networks, device=device)
         self.n_fno_layers: int = n_fno_layers
         self.n_hmodes: int = n_hmodes
         self.n_wmodes: int = n_wmodes
@@ -411,7 +418,7 @@ class FLRONetFNO(_BaseFLRONet):
         self.branch_nets = nn.ModuleList(
             modules=[
                 FNOBranchNet(
-                    n_channels=n_channels, n_fno_layers=n_fno_layers, n_hmodes=n_hmodes, n_wmodes=n_wmodes, embedding_dim=embedding_dim,
+                    n_channels=n_channels, n_fno_layers=n_fno_layers, n_hmodes=n_hmodes, n_wmodes=n_wmodes, embedding_dim=embedding_dim, device=self.device,
                 )
                 for _ in range(n_stacked_networks)
             ]
@@ -420,14 +427,14 @@ class FLRONetFNO(_BaseFLRONet):
 
 class FLRONetMLP(_BaseFLRONet):
 
-    def __init__(self, n_channels: int, embedding_dim: int, n_sensors: int, resolution: int, n_stacked_networks: int):
-        super().__init__(n_channels=n_channels, embedding_dim=embedding_dim, n_stacked_networks=n_stacked_networks)
+    def __init__(self, n_channels: int, embedding_dim: int, n_sensors: int, resolution: int, n_stacked_networks: int, device: str = None):
+        super().__init__(n_channels=n_channels, embedding_dim=embedding_dim, n_stacked_networks=n_stacked_networks, device=device)
         self.n_sensors: int = n_sensors
         self.resolution: int = resolution
 
         self.branch_nets = nn.ModuleList(
             modules=[
-                MLPBranchNet(n_channels=n_channels, embedding_dim=embedding_dim, n_sensors=n_sensors, resolution=resolution)
+                MLPBranchNet(n_channels=n_channels, embedding_dim=embedding_dim, n_sensors=n_sensors, resolution=resolution, device=self.device)
                 for _ in range(n_stacked_networks)
             ]
         )
@@ -435,12 +442,12 @@ class FLRONetMLP(_BaseFLRONet):
 
 class FLRONetUNet(_BaseFLRONet):
 
-    def __init__(self, n_channels: int, embedding_dim: int, n_stacked_networks: int):
-        super().__init__(n_channels=n_channels, embedding_dim=embedding_dim, n_stacked_networks=n_stacked_networks)
+    def __init__(self, n_channels: int, embedding_dim: int, n_stacked_networks: int, device: str = None):
+        super().__init__(n_channels=n_channels, embedding_dim=embedding_dim, n_stacked_networks=n_stacked_networks, device=device)
 
         self.branch_nets = nn.ModuleList(
             modules=[
-                UNetBranchNet(n_channels=n_channels, embedding_dim=embedding_dim)
+                UNetBranchNet(n_channels=n_channels, embedding_dim=embedding_dim, device=self.device)
                 for _ in range(n_stacked_networks)
             ]
         )

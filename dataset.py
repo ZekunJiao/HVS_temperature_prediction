@@ -1,7 +1,9 @@
-from typing import Tuple
+from typing import List, Tuple
 import torch
 import random
 from torch.utils.data import Dataset
+from embedding import SensorEmbedding, Voronoi
+from sensors import SensorGenerator
 from utils import create_masked_input, create_x
 from simulation import create_blob_diffusivity, simulate_simulation
 import os
@@ -9,6 +11,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from continuiti.data import OperatorDataset
 import datetime
+import torch.nn.functional as F
 
 
 class TemperatureDataset(Dataset):
@@ -166,7 +169,7 @@ class OperatorDataset(td.Dataset):
         return sample["x"], sample["u"], sample["y"], sample["v"]
 
 
-class SimulationDataset(td.Dataset):
+class SnapshotsSimulationDataset(td.Dataset):
     def __init__(      
         self, 
         num_simulations, 
@@ -267,97 +270,87 @@ class FullSimulationDataset(Dataset):
 
 class FLRONetDataset(Dataset):
     """
-    PyTorch Dataset for FLRONet-style operator learning on 2D transient fields.
-    Each sample consists of:
-      - sensor_timeframes: Tensor of shape (S,) giving time indices of sensor readings
-      - sensor_tensor:    Tensor of shape (S, 1, H_out, W_out) dense embedding of sparse readings
-      - full_timeframes:  Tensor of shape (F,) giving time indices of full-field targets
-      - full_tensor:      Tensor of shape (F, 1, H_out, W_out) ground-truth fields
+    Dataset for FLRONet operator learning: sparse sensor history -> full-field snapshot.
+    Each sample returns:
+      sensor_tfs: (S,) int64 tensor of sensor time indices
+      sensor_tensor: (S, C, H_out, W_out) embedded dense sensor fields
+      full_tfs: (F,) int64 tensor of full-state time indices
+      full_tensor: (F, C, H_out, W_out) ground-truth fields
     """
     def __init__(
         self,
         simulation_file: str,
-        sensor_positions: torch.Tensor,
-        init_sensor_timeframes: list,
-        init_fullstate_timeframes: list,
-        resolution: tuple,
-        sigma: float = 0.05,
+        num_simulations: int,
+        sensor_generator: SensorGenerator,
+        embedding_generator: SensorEmbedding,
+        init_sensor_timeframes: List[int],
+        init_fullstate_timeframes: List[int],
+        resolution: Tuple[int, int],
         seed: int = 0
     ):
-        super().__init__()
-        # Load simulation data
-        data = torch.load(simulation_file, map_location="cpu")
-        # T: (N_sim, nt, H0, W0)
-        self.T = data["T"]              
-        N_sim, nt, H0, W0 = self.T.shape
-        
-        # Sensor and target time offsets
+        # Load simulation data: tensor T of shape (N_sim, nt, H0, W0)
+        data = torch.load(simulation_file, map_location='cpu')
+        self.T = data['T'][:num_simulations]  # Only use the first num_simulations
+        self.N_sim, self.nt, self.H0, self.W0 = self.T.shape
+
+        # Time offsets for sensors and targets
         self.init_sensor_timeframes = torch.tensor(init_sensor_timeframes, dtype=torch.long)
         self.init_fullstate_timeframes = torch.tensor(init_fullstate_timeframes, dtype=torch.long)
         self.S = len(init_sensor_timeframes)
         self.F = len(init_fullstate_timeframes)
-        
-        # Sensor positions in normalized [0,1] coords, shape (n_sensors, 2) -> (y, x)
-        self.sensor_positions = sensor_positions.float()
-        self.n_sensors = self.sensor_positions.shape[0]
-        
+
         # Output resolution
         self.H_out, self.W_out = resolution
-        
-        # Precompute RBF embedding weights on normalized grid
-        y_lin = torch.linspace(0, 1, self.H_out)
-        x_lin = torch.linspace(0, 1, self.W_out)
-        Y, X = torch.meshgrid(y_lin, x_lin, indexing="ij")
-        # distances: (n_sensors, H_out, W_out)
-        self.distances = torch.sqrt(
-            (Y[None] - self.sensor_positions[:, 0:1])**2 +
-            (X[None] - self.sensor_positions[:, 1:2])**2
-        )
-        # RBF weights
-        self.weights = torch.exp(-(self.distances / sigma)**2)
-        # Normalize across sensors
-        self.weights = self.weights / self.weights.sum(dim=0, keepdim=True)
-        
-        # Number of sliding windows per simulation
-        self.n_chunks_per_sim = nt - int(self.init_sensor_timeframes.max())
-        self.total_samples = N_sim * self.n_chunks_per_sim
-        
-        torch.manual_seed(seed)
-    
+
+        # Generate fixed sensor positions
+        sensor_generator.resolution = resolution
+        sensor_generator.seed = seed
+        self.sensor_positions = sensor_generator()
+        assert self.sensor_positions.ndim == 2 and self.sensor_positions.shape[1] == 2
+
+        # Initialize embedding
+        embedding_generator.resolution = resolution
+        embedding_generator.sensor_positions = self.sensor_positions
+        self.embedding = embedding_generator
+
+        # Slide window to compute available chunks
+        self.n_chunks = self.nt - int(self.init_sensor_timeframes.max())
+        # Sensor timeframes tensor: (n_chunks, S)
+        sensor_offsets = self.init_sensor_timeframes.unsqueeze(0) + torch.arange(self.n_chunks).unsqueeze(1)
+        self.sensor_timeframes = sensor_offsets.long()
+        # Full-state timeframes: (n_chunks, F)
+        full_offsets = self.init_fullstate_timeframes.unsqueeze(0) + torch.arange(self.n_chunks).unsqueeze(1)
+        self.fullstate_timeframes = full_offsets.long()
+
+        # Precompute Voronoi distances once
+        if isinstance(self.embedding, Voronoi):
+            _ = self.embedding.precomputed_distances
+
     def __len__(self):
-        return self.total_samples
-    
+        # total samples = number of sims * chunks per sim
+        return self.N_sim * self.n_chunks
+
     def __getitem__(self, idx: int):
-        # Determine which simulation and which chunk
-        sim_idx = idx // self.n_chunks_per_sim
-        chunk_idx = idx % self.n_chunks_per_sim
-        
-        # Compute absolute time indices
-        sensor_tfs = self.init_sensor_timeframes + chunk_idx  # (S,)
-        full_tfs   = self.init_fullstate_timeframes + chunk_idx  # (F,)
-        
-        # Raw sensor values: extract T at sensor grid indices
-        # First, get raw fields: (S, H0, W0)
-        raw_fields = self.T[sim_idx, sensor_tfs]  # (S, H0, W0)
-        # Map normalized positions to original grid indices
-        rows = (self.sensor_positions[:, 0] * (raw_fields.shape[1] - 1)).round().long()
-        cols = (self.sensor_positions[:, 1] * (raw_fields.shape[2] - 1)).round().long()
-        # Gather sensor readings: (S, n_sensors)
-        sensor_vals = raw_fields[:, rows, cols]  # (S, n_sensors)
-        
-        # Embed sparse readings into dense grids: (S, H_out, W_out)
-        dense_embeds = torch.einsum('si,ihw->shw', sensor_vals, self.weights)
-        # Add channel dim: (S, 1, H_out, W_out)
-        sensor_tensor = dense_embeds.unsqueeze(1)
-        
-        # Full-state target fields
-        full_fields = self.T[sim_idx, full_tfs]  # (F, H0, W0)
-        # Resize to output resolution
-        full_tensor = F.interpolate(
-            full_fields.unsqueeze(1), size=(self.H_out, self.W_out),
-            mode='bicubic', align_corners=False
-        )  # (F, 1, H_out, W_out)
-        
+        # Determine simulation and chunk
+        sim_idx = idx // self.n_chunks
+        chunk_idx = idx % self.n_chunks
+
+        # Time indices
+        sensor_tfs = self.sensor_timeframes[chunk_idx]  # (S,)
+        full_tfs   = self.fullstate_timeframes[chunk_idx]  # (F,)
+
+        # Extract and resize sensor history fields: (S, H0, W0) -> (S,1,H_out,W_out)
+        raw_sensors = self.T[sim_idx, sensor_tfs]  # (S, H0, W0)
+        raw_sensors = raw_sensors.unsqueeze(1)     # (S,1,H0,W0)
+        resized = F.interpolate(raw_sensors, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False)
+        # Embed sparse sensors to dense grid: expects (N_batch, T, C, H, W)
+        emb_input = resized.unsqueeze(0)  # (1, S, 1, H_out, W_out)
+        sensor_tensor = self.embedding(emb_input, seed=idx).squeeze(0)  # (S, 1, H_out, W_out)
+
+        # Extract and resize full-state target: (F, H0, W0) -> (F,1,H_out,W_out)
+        raw_full = self.T[sim_idx, full_tfs].unsqueeze(1)
+        full_tensor = F.interpolate(raw_full, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False)
+
         return sensor_tfs, sensor_tensor, full_tfs, full_tensor
 
 class OperatorFieldMappingDataset(OperatorDataset):
