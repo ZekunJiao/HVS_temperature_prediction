@@ -166,85 +166,6 @@ class OperatorDataset(td.Dataset):
         return sample["x"], sample["u"], sample["y"], sample["v"]
 
 
-
-class OperatorTemperatureDataset(OperatorDataset):
-    def __init__(self, num_simulations, nx, ny, dx, dy, nt, dt, t0, noise_amplitude,observed_fraction, device, save_path=None):
-        # We'll store snapshots from time steps t = 1, 2, ..., nt-1 for each simulation
-        x_data = []
-        u_data = []
-        y_data = []
-        v_data = []
-
-        for i in range(num_simulations): 
-            print(f"generating simulation {i}")
-            # Run the simulation to get the full time series T
-
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt, noise_amplitude, device=device)
-            # Exclude the initial condition (t=0) and add remaining snapshots
-            rand_timeframe = random.randint(1, nt - 1)
-
-            ## min max scale 
-
-            v = T_series[nt - 1]
-            v = (v - torch.min(v)) / (torch.max(v) - torch.min(v))
-
-            x, u = create_operator_input(v, observed_fraction=observed_fraction)
-            grid_x, grid_y = torch.meshgrid(torch.arange(0, len(v), dtype=torch.float32), torch.arange(0, len(v[0]), dtype=torch.float32))
-            
-            # Normalize the grid coordinates to [0,1]
-            norm_factor = max(nx, ny) -1
-            grid_x = grid_x / (nx - 1)
-            grid_y = grid_y / (ny - 1)
-            y = torch.stack([grid_y, grid_x])
-
-            ######### plotting ##########
-            # fig, axs = plt.subplots(1, 3, figsize=(22,6))
-            # im = axs[0].imshow(v, cmap="viridis", origin="lower")
-            # fig.colorbar(im, ax=axs[0], label="Temperature")
-            # axs[0].set_title("Temperature Field at Final Time")
-            # axs[0].set_xlabel("X index")
-            # axs[0].set_ylabel("Y index")
-
-            # axs[1].scatter(x[0], x[1], c=u, cmap="viridis", s=1)
-            # axs[1].set_xlim(0, 2)
-            # axs[1].set_ylim(0, 2)
-            print(y.shape)
-            print(v.shape)
-
-            # axs[2].scatter(y[0], y[1], c=v, cmap="viridis", s=1)
-            # axs[2].set_xlim(0, 2)
-            # axs[2].set_ylim(0, 2)
-            # plt.savefig("./temp")
-            ########plotting ends ##########
-
-            x_data.append(x)
-            y_data.append(y)
-            u_data.append(u)
-            v_data.append(v)
-            del T_series
-            torch.cuda.empty_cache()
-        # Stack all snapshots into a tensor of shape (num_samples, nx, ny)
-        
-        x_data = torch.stack(x_data, dim=0) 
-        u_data = torch.stack(u_data, dim=0)
-        y_data = torch.stack(y_data, dim=0) 
-        v_data = torch.stack(v_data, dim=0)
-        v_data = v_data.unsqueeze(dim=1)
-        u_data = u_data.unsqueeze(dim=1)
-
-        print(f"x shape: {x_data.shape}")
-        print(f"y shape: {y_data.shape}")
-        print(f"u shape: {u_data.shape}")
-        print(f"v shape: {v_data.shape}")
-
-        super().__init__(x=x_data, y=y_data, u=u_data, v=v_data)
-
-        if save_path:
-            os.makedirs(os.path.dirname(save_path), exist_ok=True)
-            torch.save(self, save_path)
-            print(f"Dataset saved at {save_path}")
-
-
 class SimulationDataset(td.Dataset):
     def __init__(      
         self, 
@@ -342,6 +263,102 @@ class FullSimulationDataset(Dataset):
         """
         return self.T[idx], self.D
 
+
+
+class FLRONetDataset(Dataset):
+    """
+    PyTorch Dataset for FLRONet-style operator learning on 2D transient fields.
+    Each sample consists of:
+      - sensor_timeframes: Tensor of shape (S,) giving time indices of sensor readings
+      - sensor_tensor:    Tensor of shape (S, 1, H_out, W_out) dense embedding of sparse readings
+      - full_timeframes:  Tensor of shape (F,) giving time indices of full-field targets
+      - full_tensor:      Tensor of shape (F, 1, H_out, W_out) ground-truth fields
+    """
+    def __init__(
+        self,
+        simulation_file: str,
+        sensor_positions: torch.Tensor,
+        init_sensor_timeframes: list,
+        init_fullstate_timeframes: list,
+        resolution: tuple,
+        sigma: float = 0.05,
+        seed: int = 0
+    ):
+        super().__init__()
+        # Load simulation data
+        data = torch.load(simulation_file, map_location="cpu")
+        # T: (N_sim, nt, H0, W0)
+        self.T = data["T"]              
+        N_sim, nt, H0, W0 = self.T.shape
+        
+        # Sensor and target time offsets
+        self.init_sensor_timeframes = torch.tensor(init_sensor_timeframes, dtype=torch.long)
+        self.init_fullstate_timeframes = torch.tensor(init_fullstate_timeframes, dtype=torch.long)
+        self.S = len(init_sensor_timeframes)
+        self.F = len(init_fullstate_timeframes)
+        
+        # Sensor positions in normalized [0,1] coords, shape (n_sensors, 2) -> (y, x)
+        self.sensor_positions = sensor_positions.float()
+        self.n_sensors = self.sensor_positions.shape[0]
+        
+        # Output resolution
+        self.H_out, self.W_out = resolution
+        
+        # Precompute RBF embedding weights on normalized grid
+        y_lin = torch.linspace(0, 1, self.H_out)
+        x_lin = torch.linspace(0, 1, self.W_out)
+        Y, X = torch.meshgrid(y_lin, x_lin, indexing="ij")
+        # distances: (n_sensors, H_out, W_out)
+        self.distances = torch.sqrt(
+            (Y[None] - self.sensor_positions[:, 0:1])**2 +
+            (X[None] - self.sensor_positions[:, 1:2])**2
+        )
+        # RBF weights
+        self.weights = torch.exp(-(self.distances / sigma)**2)
+        # Normalize across sensors
+        self.weights = self.weights / self.weights.sum(dim=0, keepdim=True)
+        
+        # Number of sliding windows per simulation
+        self.n_chunks_per_sim = nt - int(self.init_sensor_timeframes.max())
+        self.total_samples = N_sim * self.n_chunks_per_sim
+        
+        torch.manual_seed(seed)
+    
+    def __len__(self):
+        return self.total_samples
+    
+    def __getitem__(self, idx: int):
+        # Determine which simulation and which chunk
+        sim_idx = idx // self.n_chunks_per_sim
+        chunk_idx = idx % self.n_chunks_per_sim
+        
+        # Compute absolute time indices
+        sensor_tfs = self.init_sensor_timeframes + chunk_idx  # (S,)
+        full_tfs   = self.init_fullstate_timeframes + chunk_idx  # (F,)
+        
+        # Raw sensor values: extract T at sensor grid indices
+        # First, get raw fields: (S, H0, W0)
+        raw_fields = self.T[sim_idx, sensor_tfs]  # (S, H0, W0)
+        # Map normalized positions to original grid indices
+        rows = (self.sensor_positions[:, 0] * (raw_fields.shape[1] - 1)).round().long()
+        cols = (self.sensor_positions[:, 1] * (raw_fields.shape[2] - 1)).round().long()
+        # Gather sensor readings: (S, n_sensors)
+        sensor_vals = raw_fields[:, rows, cols]  # (S, n_sensors)
+        
+        # Embed sparse readings into dense grids: (S, H_out, W_out)
+        dense_embeds = torch.einsum('si,ihw->shw', sensor_vals, self.weights)
+        # Add channel dim: (S, 1, H_out, W_out)
+        sensor_tensor = dense_embeds.unsqueeze(1)
+        
+        # Full-state target fields
+        full_fields = self.T[sim_idx, full_tfs]  # (F, H0, W0)
+        # Resize to output resolution
+        full_tensor = F.interpolate(
+            full_fields.unsqueeze(1), size=(self.H_out, self.W_out),
+            mode='bicubic', align_corners=False
+        )  # (F, 1, H_out, W_out)
+        
+        return sensor_tfs, sensor_tensor, full_tfs, full_tensor
 
 class OperatorFieldMappingDataset(OperatorDataset):
     def __init__(
