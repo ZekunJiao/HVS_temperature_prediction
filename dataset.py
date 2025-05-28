@@ -1,3 +1,4 @@
+import shutil
 from typing import List, Tuple
 import torch
 import random
@@ -266,8 +267,6 @@ class FullSimulationDataset(Dataset):
         """
         return self.T[idx], self.D
 
-
-
 class FLRONetDataset(Dataset):
     """
     Dataset for FLRONet operator learning: sparse sensor history -> full-field snapshot.
@@ -283,75 +282,137 @@ class FLRONetDataset(Dataset):
         num_simulations: int,
         sensor_generator: SensorGenerator,
         embedding_generator: SensorEmbedding,
-        init_sensor_timeframes: List[int],
-        init_fullstate_timeframes: List[int],
-        resolution: Tuple[int, int],
+        init_sensor_timeframes: list[int],
+        init_fullstate_timeframes: list[int],
+        resolution: tuple[int, int],
         seed: int = 0
     ):
-        # Load simulation data: tensor T of shape (N_sim, nt, H0, W0)
-        data = torch.load(simulation_file, map_location='cpu')
-        self.T = data['T'][:num_simulations]  # Only use the first num_simulations
-        self.N_sim, self.nt, self.H0, self.W0 = self.T.shape
+        # Setup disk cache directories
+        base = os.path.splitext(os.path.basename(simulation_file))[0]
+        self.dest = os.path.join('.', 'tensors', base)
+        self.sensor_timeframes_dest = os.path.join(self.dest, 'sensor_timeframes')
+        self.sensor_values_dest     = os.path.join(self.dest, 'sensor_values')
+        self.fullstate_timeframes_dest = os.path.join(self.dest, 'fullstate_timeframes')
+        self.fullstate_values_dest     = os.path.join(self.dest, 'fullstate_values')
+        os.makedirs(self.sensor_timeframes_dest, exist_ok=True)
+        os.makedirs(self.sensor_values_dest, exist_ok=True)
+        os.makedirs(self.fullstate_timeframes_dest, exist_ok=True)
+        os.makedirs(self.fullstate_values_dest, exist_ok=True)
 
-        # Time offsets for sensors and targets
-        self.init_sensor_timeframes = torch.tensor(init_sensor_timeframes, dtype=torch.long)
-        self.init_fullstate_timeframes = torch.tensor(init_fullstate_timeframes, dtype=torch.long)
-        self.S = len(init_sensor_timeframes)
-        self.F = len(init_fullstate_timeframes)
+        meta_path = os.path.join(self.dest, 'meta.pt')
+        cache_empty = not os.listdir(self.sensor_timeframes_dest)
 
-        # Output resolution
-        self.H_out, self.W_out = resolution
+        if cache_empty:
+            # Load simulation data and write cache
+            print(f"Cache empty under {self.dest}, populating...")
+            data = torch.load(simulation_file, map_location='cpu')
+            self.T = data['T'][:num_simulations]
+            self.N_sim, self.nt, self.H0, self.W0 = self.T.shape
 
-        # Generate fixed sensor positions
-        sensor_generator.resolution = resolution
-        sensor_generator.seed = seed
-        self.sensor_positions = sensor_generator()
-        assert self.sensor_positions.ndim == 2 and self.sensor_positions.shape[1] == 2
+            # Time offsets
+            self.init_sensor_timeframes = torch.tensor(init_sensor_timeframes, dtype=torch.long)
+            self.init_fullstate_timeframes = torch.tensor(init_fullstate_timeframes, dtype=torch.long)
+            self.S = len(self.init_sensor_timeframes)
+            self.F = len(self.init_fullstate_timeframes)
 
-        # Initialize embedding
-        embedding_generator.resolution = resolution
-        embedding_generator.sensor_positions = self.sensor_positions
-        self.embedding = embedding_generator
+            # Output resolution
+            self.H_out, self.W_out = resolution
 
-        # Slide window to compute available chunks
-        self.n_chunks = self.nt - int(self.init_sensor_timeframes.max())
-        # Sensor timeframes tensor: (n_chunks, S)
-        sensor_offsets = self.init_sensor_timeframes.unsqueeze(0) + torch.arange(self.n_chunks).unsqueeze(1)
-        self.sensor_timeframes = sensor_offsets.long()
-        # Full-state timeframes: (n_chunks, F)
-        full_offsets = self.init_fullstate_timeframes.unsqueeze(0) + torch.arange(self.n_chunks).unsqueeze(1)
-        self.fullstate_timeframes = full_offsets.long()
+            # Generate fixed sensor positions
+            sensor_generator.resolution = resolution
+            sensor_generator.seed = seed
+            self.sensor_positions = sensor_generator()
 
-        # Precompute Voronoi distances once
-        if isinstance(self.embedding, Voronoi):
-            _ = self.embedding.precomputed_distances
+            # Initialize embedding
+            embedding_generator.resolution = resolution
+            embedding_generator.sensor_positions = self.sensor_positions
+            self.embedding = embedding_generator
+            if isinstance(self.embedding, Voronoi):
+                _ = self.embedding.precomputed_distances
+
+            # Slide window
+            self.n_chunks = self.nt - int(self.init_sensor_timeframes.max())
+            sensor_offsets = self.init_sensor_timeframes.unsqueeze(0) + torch.arange(self.n_chunks).unsqueeze(1)
+            self.sensor_timeframes = sensor_offsets.long()
+            full_offsets = self.init_fullstate_timeframes.unsqueeze(0) + torch.arange(self.n_chunks).unsqueeze(1)
+            self.fullstate_timeframes = full_offsets.long()
+
+            # Write cache and metadata
+            self._write_to_disk()
+            torch.save({
+                'N_sim': self.N_sim,
+                'nt': self.nt,
+                'H0': self.H0,
+                'W0': self.W0,
+                'n_chunks': self.n_chunks
+            }, meta_path)
+
+            # Free memory
+            del self.T
+
+        else:
+            # Load metadata only
+            meta = torch.load(meta_path)
+            self.N_sim = meta['N_sim']
+            self.nt    = meta['nt']
+            self.H0    = meta['H0']
+            self.W0    = meta['W0']
+            self.n_chunks = meta['n_chunks']
+            print(f"Loading cached tensors from {self.dest}")
+
+            # Sensor/full offsets and dimensions need init args too
+            self.init_sensor_timeframes = torch.tensor(init_sensor_timeframes, dtype=torch.long)
+            self.init_fullstate_timeframes = torch.tensor(init_fullstate_timeframes, dtype=torch.long)
+            self.S = len(self.init_sensor_timeframes)
+            self.F = len(self.init_fullstate_timeframes)
+            self.H_out, self.W_out = resolution
+            
+            sensor_generator.resolution = resolution
+            sensor_generator.seed = seed
+            self.sensor_positions = sensor_generator()
+            embedding_generator.resolution = resolution
+            embedding_generator.sensor_positions = self.sensor_positions
+            self.embedding = embedding_generator
+
+        print("Dataset initialized:", self.N_sim, "sims x", self.n_chunks, "chunks each.")
 
     def __len__(self):
-        # total samples = number of sims * chunks per sim
         return self.N_sim * self.n_chunks
 
     def __getitem__(self, idx: int):
-        # Determine simulation and chunk
         sim_idx = idx // self.n_chunks
         chunk_idx = idx % self.n_chunks
-
-        # Time indices
-        sensor_tfs = self.sensor_timeframes[chunk_idx]  # (S,)
-        full_tfs   = self.fullstate_timeframes[chunk_idx]  # (F,)
-
-        # Extract and resize sensor history fields: (S, H0, W0) -> (S,1,H_out,W_out)
-        raw_sensors = self.T[sim_idx, sensor_tfs]  # (S, H0, W0)
-        raw_sensors = raw_sensors.unsqueeze(1)     # (S,1,H0,W0)
-        resized = F.interpolate(raw_sensors, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False)
-        # Embed sparse sensors to dense grid: expects (N_batch, T, C, H, W)
-        emb_input = resized.unsqueeze(0)  # (1, S, 1, H_out, W_out)
-        sensor_tensor = self.embedding(emb_input, seed=idx).squeeze(0)  # (S, 1, H_out, W_out)
-
-        # Extract and resize full-state target: (F, H0, W0) -> (F,1,H_out,W_out)
-        raw_full = self.T[sim_idx, full_tfs].unsqueeze(1)
-        full_tensor = F.interpolate(raw_full, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False)
-
+        suf = str(idx).zfill(6)
+        sensor_tfs = torch.load(os.path.join(self.sensor_timeframes_dest, f'st_{suf}.pt'))
+        sensor_tensor = torch.load(os.path.join(self.sensor_values_dest, f'sv_{suf}.pt'))
+        full_tfs = torch.load(os.path.join(self.fullstate_timeframes_dest, f'ft_{suf}.pt'))
+        full_tensor = torch.load(os.path.join(self.fullstate_values_dest, f'fv_{suf}.pt'))
         return sensor_tfs, sensor_tensor, full_tfs, full_tensor
+
+    def _write_to_disk(self):
+        # Clear existing cache
+        for d in [self.sensor_timeframes_dest, self.sensor_values_dest,
+                  self.fullstate_timeframes_dest, self.fullstate_values_dest]:
+            if os.path.isdir(d): shutil.rmtree(d)
+            os.makedirs(d, exist_ok=True)
+
+        # Loop over all samples
+        for idx in range(len(self)):
+            sim_idx = idx // self.n_chunks
+            chunk_idx = idx % self.n_chunks
+            sensor_tfs = self.sensor_timeframes[chunk_idx]
+            full_tfs   = self.fullstate_timeframes[chunk_idx]
+            raw_sensors = self.T[sim_idx, sensor_tfs].unsqueeze(1)
+            resized = F.interpolate(raw_sensors, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False)
+            emb_input = resized.unsqueeze(0)
+            sensor_tensor = self.embedding(emb_input, seed=idx).squeeze(0)
+            raw_full = self.T[sim_idx, full_tfs].unsqueeze(1)
+            full_tensor = F.interpolate(raw_full, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False)
+            suf = str(idx).zfill(6)
+            torch.save(sensor_tfs, os.path.join(self.sensor_timeframes_dest, f'st_{suf}.pt'))
+            torch.save(sensor_tensor, os.path.join(self.sensor_values_dest, f'sv_{suf}.pt'))
+            torch.save(full_tfs, os.path.join(self.fullstate_timeframes_dest, f'ft_{suf}.pt'))
+            torch.save(full_tensor, os.path.join(self.fullstate_values_dest, f'fv_{suf}.pt'))
 
 class OperatorFieldMappingDataset(OperatorDataset):
     def __init__(
@@ -529,20 +590,20 @@ if __name__ == "__main__":
     plt.savefig("diffusion_coefficient.png")
     plt.show()
 
-    simulation_dataset = FullSimulationDataset(
-        num_simulations=num_simulations,
-        nx=nx,
-        ny=ny,
-        dx=dx,
-        dy=dy,
-        D=D,
-        nt=nt,
-        dt=dt,
-        noise_amplitude=noise_amplitude,
-        device=device,
-        save_path=save_path_simulation
-    )
-    # ######################################################
+    # simulation_dataset = FullSimulationDataset(
+    #     num_simulations=num_simulations,
+    #     nx=nx,
+    #     ny=ny,
+    #     dx=dx,
+    #     dy=dy,
+    #     D=D,
+    #     nt=nt,
+    #     dt=dt,
+    #     noise_amplitude=noise_amplitude,
+    #     device=device,
+    #     save_path=save_path_simulation
+    # )
+    # # ######################################################
 
     # ########### generate operator dataset ################
 
