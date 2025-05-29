@@ -94,11 +94,11 @@ if __name__ == "__main__":
     # Instantiate model
     model = FLRONetFNO(
         n_channels=1,
-        n_fno_layers=4,
-        n_hmodes=24,
-        n_wmodes=48,
-        embedding_dim=64,
-        n_stacked_networks=2,
+        n_fno_layers=3,
+        n_hmodes=12,
+        n_wmodes=24,
+        embedding_dim=48,
+        n_stacked_networks=1,
         device=device
     ).to(device)
 

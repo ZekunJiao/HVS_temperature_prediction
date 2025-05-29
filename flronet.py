@@ -424,7 +424,6 @@ class FLRONetFNO(_BaseFLRONet):
             ]
         )
 
-
 class FLRONetMLP(_BaseFLRONet):
 
     def __init__(self, n_channels: int, embedding_dim: int, n_sensors: int, resolution: int, n_stacked_networks: int, device: str = None):
