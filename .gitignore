@@ -21,3 +21,5 @@ notebooks/*
 simulation_data_bernd/*
 
 /tensors/*
+
+/checkpoints/**
