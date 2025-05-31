@@ -171,8 +171,7 @@ class OperatorDataset(td.Dataset):
 
 
 class SnapshotsSimulationDataset(td.Dataset):
-    def __init__(      
-        self, 
+    def __init__(self,      
         num_simulations, 
         nx, ny, dx, dy, nt, dt, 
         d_in, d_out,
@@ -238,18 +237,18 @@ class FullSimulationDataset(Dataset):
         super().__init__()
         self.device = device
 
-        # Pre‐allocate a tensor to hold all simulations
-        all_T = torch.empty((num_simulations, nt, ny, nx), device=device)
+        all_T_list = [] # Initialize an empty list
         for i in range(num_simulations):
             print(f"  Generating simulation {i+1}/{num_simulations}")
-            all_T[i] = simulate_simulation(
+            simulation_data = simulate_simulation(
                 nx, ny, dx, dy, nt, dt,
                 noise_amplitude=noise_amplitude,
                 device=device,
                 D=D                       # your custom full-map
             )
+            all_T_list.append(simulation_data.cpu()) # Move to CPU and append
 
-        self.T = all_T.cpu()  # keep data on CPU for DataLoader
+        self.T = torch.stack(all_T_list) # Stack all simulations
         self.D = D.clone().cpu()
 
         if save_path is not None:
@@ -342,6 +341,57 @@ class FLRONetDataset(Dataset):
 
         print(f"Initialized: {self.num_simulations} sims x {self.n_chunks} chunks each.")
 
+        # Visualize the first sample upon initialization
+        if len(self) > 0:
+            print("Visualizing the first sample of the initialized FLRONetDataset...")
+            try:
+                # Get the first sample
+                sensor_tfs_sample, sensor_tensor_sample, full_tfs_sample, full_tensor_sample = self.__getitem__(0)
+
+                fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+
+                # Plot sensor tensor
+                ax_sensor = axes[0]
+                if sensor_tensor_sample.ndim == 4 and sensor_tensor_sample.shape[0] > 0 and sensor_tensor_sample.shape[1] > 0: # Check S > 0 and C > 0
+                    img_sensor = sensor_tensor_sample[0, 0, :, :].numpy() # First sensor timeframe, first channel
+                    sensor_time_idx_for_title = sensor_tfs_sample[0].item() if sensor_tfs_sample.numel() > 0 and sensor_tfs_sample.ndim > 0 else "N/A"
+                    im_sensor = ax_sensor.imshow(img_sensor, cmap='viridis', origin='lower', aspect='auto')
+                    ax_sensor.set_title(f"First Sample: Sensor Tensor (T={sensor_time_idx_for_title})")
+                    fig.colorbar(im_sensor, ax=ax_sensor, label="Value")
+                else:
+                    ax_sensor.set_title("First Sample: Sensor Tensor (No data or invalid shape)")
+                    ax_sensor.text(0.5, 0.5, "No sensor data to display", ha='center', va='center')
+                ax_sensor.set_xlabel("Width")
+                ax_sensor.set_ylabel("Height")
+
+                # Plot full tensor
+                ax_full = axes[1]
+                if full_tensor_sample.ndim == 4 and full_tensor_sample.shape[0] > 0 and full_tensor_sample.shape[1] > 0: # Check F > 0 and C > 0
+                    img_full = full_tensor_sample[0, 0, :, :].numpy()   # First full-state timeframe, first channel
+                    full_time_idx_for_title = full_tfs_sample[0].item() if full_tfs_sample.numel() > 0 and full_tfs_sample.ndim > 0 else "N/A"
+                    im_full = ax_full.imshow(img_full, cmap='viridis', origin='lower', aspect='auto')
+                    ax_full.set_title(f"First Sample: Full Tensor (T={full_time_idx_for_title})")
+                    fig.colorbar(im_full, ax=ax_full, label="Value")
+                else:
+                    ax_full.set_title("First Sample: Full Tensor (No data or invalid shape)")
+                    ax_full.text(0.5, 0.5, "No full-field data to display", ha='center', va='center')
+                ax_full.set_xlabel("Width")
+                ax_full.set_ylabel("Height")
+
+                plt.tight_layout()
+                
+                fig_save_dir = "."
+                os.makedirs(fig_save_dir, exist_ok=True) # Ensure the directory exists
+                save_path_fig = os.path.join(fig_save_dir, "initial_sample_visualization.png")
+                
+                plt.savefig(save_path_fig)
+                print(f"Saved initial sample visualization to {save_path_fig}")
+                plt.close(fig)
+            except Exception as e:
+                print(f"Could not visualize initial sample: {e}")
+        else:
+            print("Dataset is empty, skipping visualization of the first sample.")
+
     def __len__(self):
         return self.num_simulations * self.n_chunks
 
@@ -368,9 +418,15 @@ class FLRONetDataset(Dataset):
             ft = self.full_timeframes[chunk_idx]
 
             # Sensor history
-            raw_s = T[sim_idx, st].unsqueeze(1)
-            resized = F.interpolate(raw_s, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False)
-            emb = self.embedding(resized.unsqueeze(0), seed=idx).squeeze(0)
+            raw_s = T[sim_idx, st].unsqueeze(1)  # T is on CPU
+            resized = F.interpolate(raw_s, size=(self.H_out, self.W_out), mode='bicubic', align_corners=False) # resized is on CPU
+            
+            # Move resized tensor to the device of sensor_positions before passing to embedding
+            embedding_input_device = self.sensor_positions.device
+            resized_for_embedding = resized.unsqueeze(0).to(embedding_input_device)
+            
+            emb_on_device = self.embedding(resized_for_embedding, seed=idx).squeeze(0)
+            emb = emb_on_device.cpu() # Move embedding result back to CPU for saving
 
             # Full field
             raw_f = T[sim_idx, ft].unsqueeze(1)
@@ -522,9 +578,9 @@ if __name__ == "__main__":
     os.chdir(script_dir)  # Set script directory as working directory
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    nx, ny = 100, 100
+    nx, ny = 100, 200
     dx, dy = 0.01, 0.01
-    num_simulations = 10
+    num_simulations = 5000
     nt = 400
     t0 = nt - 1
     d_min = 0.1
@@ -559,20 +615,20 @@ if __name__ == "__main__":
     plt.savefig("diffusion_coefficient.png")
     plt.show()
 
-    # simulation_dataset = FullSimulationDataset(
-    #     num_simulations=num_simulations,
-    #     nx=nx,
-    #     ny=ny,
-    #     dx=dx,
-    #     dy=dy,
-    #     D=D,
-    #     nt=nt,
-    #     dt=dt,
-    #     noise_amplitude=noise_amplitude,
-    #     device=device,
-    #     save_path=save_path_simulation
-    # )
-    # # ######################################################
+    simulation_dataset = FullSimulationDataset(
+        num_simulations=num_simulations,
+        nx=nx,
+        ny=ny,
+        dx=dx,
+        dy=dy,
+        D=D,
+        nt=nt,
+        dt=dt,
+        noise_amplitude=noise_amplitude,
+        device=device,
+        save_path=save_path_simulation
+    )
+    # ######################################################
 
     # ########### generate operator dataset ################
 
