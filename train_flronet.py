@@ -2,6 +2,7 @@ import os
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, random_split
+from torch.utils.tensorboard import SummaryWriter # Added for TensorBoard
 from tqdm import tqdm
 import time
 from dataset import FLRONetDataset
@@ -12,8 +13,8 @@ from sensors import LHS, SensorGenerator
 
 if __name__ == "__main__":
     # ==== Hardcoded Configuration ==== 
-    simulation_file = "./datasets/simulation/0526_172711_simulation_n2000_nx100_ny100_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
-    num_simulations = 100
+    simulation_file = "./datasets/simulation/0530_190751_simulation_n100_nx100_ny100_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
+    num_simulations = 10
     sensor_positions_file = "tensors/sensor_positions/pos.pt"
     init_sensor_timeframes = [0, 5, 10, 15, 20]
     init_fullstate_timeframes = [20]
@@ -22,6 +23,7 @@ if __name__ == "__main__":
     epochs = 100
     lr = 1e-4
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("Using device:", device)
     save_dir = "checkpoints"
     seed = 0
 
@@ -37,6 +39,9 @@ if __name__ == "__main__":
     print(f"Learning rate: {lr}")
     print(f"Save directory: {save_dir}")
     print("="*60)
+
+    # Initialize TensorBoard writer (only once!)
+    writer = SummaryWriter(log_dir=os.path.join("runs", "flronet", time.strftime("%m%d-%H%M%S")))
 
     # Ensure checkpoint directory exists
     os.makedirs(save_dir, exist_ok=True)
@@ -95,8 +100,13 @@ if __name__ == "__main__":
     model = FLRONetFNO(
         n_channels=1,
         n_fno_layers=2,
+<<<<<<< HEAD
         n_hmodes=8,
         n_wmodes=16,
+=======
+        n_hmodes=4,
+        n_wmodes=8,
+>>>>>>> bbf1b472a88ae408d3d3c00f8f3d8b2dc3a1acc8
         embedding_dim=32,
         n_stacked_networks=1,
         device=device
@@ -144,6 +154,7 @@ if __name__ == "__main__":
             train_pbar.set_postfix({'Loss': f'{batch_loss:.6f}'})
 
         avg_train_loss = train_loss / len(train_loader.dataset)
+        writer.add_scalar('Loss/train', avg_train_loss, epoch) # Log training loss
 
         # --- Validation ---
         model.eval()
@@ -169,7 +180,12 @@ if __name__ == "__main__":
                 val_pbar.set_postfix({'Loss': f'{batch_loss:.6f}'})
 
         avg_val_loss = val_loss / len(val_loader.dataset)
+        writer.add_scalar('Loss/validation', avg_val_loss, epoch) # Log validation loss
         epoch_time = time.time() - epoch_start_time
+
+        # Log to TensorBoard
+        writer.add_scalar('Loss/Train', avg_train_loss, epoch)
+        writer.add_scalar('Loss/Val', avg_val_loss, epoch)
 
         # Print epoch summary
         print(f"Epoch {epoch:3d}/{epochs} | "
@@ -190,4 +206,5 @@ if __name__ == "__main__":
     print("Training completed!")
     print(f"Best validation loss: {best_val_loss:.6f}")
     print("="*60)
+    writer.close() # Close the TensorBoard writer
 
