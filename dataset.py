@@ -173,10 +173,10 @@ class OperatorDataset(td.Dataset):
 class SnapshotsSimulationDataset(td.Dataset):
     def __init__(self,      
         num_simulations, 
-        nx, ny, dx, dy, nt, dt, 
-        d_in, d_out,
-        start_x, start_y, end_x, end_y,
-        t0, 
+        nx, ny, dx, dy, nt, dt, # nt is the max number of steps for random choice
+        D,  # full (ny, nx) diffusivity map to use for all sims
+        # d_in, d_out, # Removed
+        # start_x, start_y, end_x, end_y, # Removed
         noise_amplitude, 
         device,
         save_path
@@ -185,14 +185,28 @@ class SnapshotsSimulationDataset(td.Dataset):
         super().__init__()
         inputs = []
         outputs = []
+        self.D_map_shape = D.shape # Store shape for potential reference, though D itself isn't saved in the .pt file by this class
         for i in range(num_simulations):
             print(f"generating simulation {i}")
-            T_series = simulate_simulation(nx, ny, dx, dy, nt, dt,
-                                           d_in=d_in, d_out=d_out,
-                                             start_x=start_x, end_x=end_x, start_y=start_y, end_y=end_y,
-                                            noise_amplitude=noise_amplitude, device=device)
-            inputs.append(T_series[t0].cpu())
-            outputs.append(T_series[nt-1].cpu())
+
+            # Generate a random snapshot time index (0 to nt-1)
+            t_snapshot = random.randint(0, nt - 1)
+            
+            # Number of time steps to simulate to get the snapshot at t_snapshot
+            nt_for_simulation = t_snapshot + 1
+
+            T_series = simulate_simulation(nx, ny, dx, dy, nt_for_simulation, dt, # Use nt_for_simulation
+                                           # d_in=d_in, d_out=d_out, # Removed
+                                           # start_x=start_x, end_x=end_x, start_y=start_y, end_y=end_y, # Removed
+                                           D=D, # Use the provided D map
+                                           noise_amplitude=noise_amplitude, device=device)
+            
+            # Input and output are the same snapshot
+            # T_series will have shape (nt_for_simulation, ny, nx)
+            # So, T_series[t_snapshot] is the last computed step.
+            snapshot_data = T_series[t_snapshot].cpu()
+            inputs.append(snapshot_data)
+            outputs.append(snapshot_data)
 
             # plt.figure()  # Create a new figure for the initial temperature field
             # plt.imshow(T_series[t0].cpu(), cmap="viridis", origin="lower")
@@ -215,6 +229,8 @@ class SnapshotsSimulationDataset(td.Dataset):
         torch.save({
             'inputs':  self.inputs,
             'outputs': self.outputs
+            # Note: D is used for generation but not saved in this specific dataset's file.
+            # If D needs to be saved, the saving logic here would need adjustment.
         }, save_path)
 
     def __getitem__(self, index): 
@@ -580,7 +596,7 @@ if __name__ == "__main__":
 
     nx, ny = 100, 200
     dx, dy = 0.01, 0.01
-    num_simulations = 5000
+    num_simulations = 3000
     nt = 400
     t0 = nt - 1
     d_min = 0.1
@@ -596,7 +612,7 @@ if __name__ == "__main__":
     radius = 5
 
     save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
-                                        f"{timestamp}_simulation_n{num_simulations}_nx{nx}_ny{ny}"
+                                        f"snapshot_{timestamp}_simulation_n{num_simulations}_nx{nx}_ny{ny}"
                                         f"_dt{dt}_dmin{d_min}_dmax{d_max}_nblobs{n_blobs}_radius{radius}.pt")
     
     print(save_path_simulation)
@@ -615,7 +631,21 @@ if __name__ == "__main__":
     plt.savefig("diffusion_coefficient.png")
     plt.show()
 
-    simulation_dataset = FullSimulationDataset(
+    # simulation_dataset = FullSimulationDataset(
+    #     num_simulations=num_simulations,
+    #     nx=nx,
+    #     ny=ny,
+    #     dx=dx,
+    #     dy=dy,
+    #     D=D,
+    #     nt=nt,
+    #     dt=dt,
+    #     noise_amplitude=noise_amplitude,
+    #     device=device,
+    #     save_path=save_path_simulation
+    # )
+
+    simulation_dataset = SnapshotsSimulationDataset(
         num_simulations=num_simulations,
         nx=nx,
         ny=ny,

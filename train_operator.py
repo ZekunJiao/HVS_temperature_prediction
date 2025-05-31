@@ -1,10 +1,7 @@
 import torch
 import matplotlib.pyplot as plt
-from continuiti.operators import DeepCatOperator, DeepONet
-from continuiti.trainer import Trainer
-from continuiti.trainer.callbacks import LearningCurve
+from continuiti.operators import DeepCatOperator
 from continuiti.data.utility import split
-from Callbacks import ModelCheckpointCallback, TensorBoardLogger
 import random 
 import os
 from datetime import datetime
@@ -200,17 +197,34 @@ def main():
     ############################################
 
     ############### CREATE OPERATOR DATASET ###############
-    num_samples = 3000
+    num_samples = 1000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "0526_172711_simulation_n2000_nx100_ny100_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
+    simulation_file = "snapshot_0531_170703_simulation_n3000_nx100_ny200_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
-    sensor_coordinates = torch.tensor([[0.2, 0.1], [0.4, 0.1], [0.6, 0.1], [0.8, 0.1]]).transpose(0, 1)
-    print("sensor coordinates", sensor_coordinates)
+    
+    # Define a 4x4 grid of points, taking centers of subdivisions
+    num_points_x = 4
+    num_points_y = 4
+    
+    # Generate coordinates that are centers of subdivisions
+    # For an interval [0, 1] and n points, coordinates are (i + 0.5) / n
+    x_coords = (torch.arange(num_points_x) + 0.5) / num_points_x
+    y_coords = (torch.arange(num_points_y) + 0.5) / num_points_y
+
+    # Create a grid of points
+    xx, yy = torch.meshgrid(x_coords, y_coords, indexing='ij') # 'ij' indexing for (H, W) style grid
+    # Flatten and stack to get coordinates in the shape (num_total_points, 2)
+    # where each row is [x, y]
+    points_2d = torch.stack([xx.flatten(), yy.flatten()], dim=1) 
+    
+    print("sensor coordinates shape:", points_2d.shape) # Should be torch.Size([16, 2])
+    print("sensor coordinates (first 5):", points_2d)
+
     dataset = OperatorFieldMappingDataset(
         num_samples=num_samples,
-        sensor_coordinates=sensor_coordinates,
+        sensor_coordinates=points_2d,
         observed_fraction=observed_fraction, 
         domain_fraction=domain_fraction,
         simulation_file_path=simulation_file_path,
@@ -238,7 +252,7 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 4000
+    epochs = 200
     trunk_depth = 16
     branch_depth = 16
     trunk_width = 32

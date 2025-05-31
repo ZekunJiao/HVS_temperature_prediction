@@ -189,11 +189,11 @@ if __name__ == "__main__":
               f"Time: {epoch_time:.2f}s")
 
         # Save best checkpoint
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            ckpt_path = os.path.join(save_dir, f"flronet_epoch{epoch}_val{avg_val_loss:.6f}.pth")
-            torch.save(model.state_dict(), ckpt_path)
-            print(f"✓ New best model saved to {ckpt_path}")
+        # if avg_val_loss < best_val_loss:
+        #     best_val_loss = avg_val_loss
+        #     # # ckpt_path = os.path.join(save_dir, f"flronet_epoch{epoch}_val{avg_val_loss:.6f}.pth")
+        #     # torch.save(model.state_dict(), ckpt_path)
+        #     # print(f"✓ New best model saved to {ckpt_path}")
         
         print("-" * 80)
 
