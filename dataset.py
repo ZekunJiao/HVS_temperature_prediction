@@ -173,6 +173,7 @@ class OperatorDataset(td.Dataset):
 class SnapshotsSimulationDataset(td.Dataset):
     def __init__(self,      
         num_simulations, 
+        random_t: bool,  # If True, generate random snapshots; if False, use the last snapshot
         nx, ny, dx, dy, nt, dt, # nt is the max number of steps for random choice
         D,  # full (ny, nx) diffusivity map to use for all sims
         # d_in, d_out, # Removed
@@ -187,17 +188,20 @@ class SnapshotsSimulationDataset(td.Dataset):
         outputs = []
         self.D_map_shape = D.shape # Store shape for potential reference, though D itself isn't saved in the .pt file by this class
         for i in range(num_simulations):
-            print(f"generating simulation {i}")
 
             # Generate a random snapshot time index (0 to nt-1)
-            t_snapshot = random.randint(0, nt - 1)
-            
-            # Number of time steps to simulate to get the snapshot at t_snapshot
-            nt_for_simulation = t_snapshot + 1
+            if random_t:
+                t_snapshot = random.randint(0, nt - 1)
+                
+                # Number of time steps to simulate to get the snapshot at t_snapshot
+                nt_for_simulation = t_snapshot + 1
+            else:
+                # Use the last snapshot (t=nt-1)
+                t_snapshot = nt - 1
+                nt_for_simulation = nt
 
-            T_series = simulate_simulation(nx, ny, dx, dy, nt_for_simulation, dt, # Use nt_for_simulation
-                                           # d_in=d_in, d_out=d_out, # Removed
-                                           # start_x=start_x, end_x=end_x, start_y=start_y, end_y=end_y, # Removed
+            print(f"generating simulation {i} at time {t_snapshot}")
+            T_series = simulate_simulation(nx, ny, dx, dy, nt_for_simulation, dt, 
                                            D=D, # Use the provided D map
                                            noise_amplitude=noise_amplitude, device=device)
             
@@ -255,7 +259,7 @@ class FullSimulationDataset(Dataset):
 
         all_T_list = [] # Initialize an empty list
         for i in range(num_simulations):
-            print(f"  Generating simulation {i+1}/{num_simulations}")
+            print(f"  Generating full simulation {i+1}/{num_simulations}")
             simulation_data = simulate_simulation(
                 nx, ny, dx, dy, nt, dt,
                 noise_amplitude=noise_amplitude,
@@ -508,14 +512,14 @@ class OperatorFieldMappingDataset(OperatorDataset):
             
             v = outputs[i]
             # normalize function values
-            u_max = torch.max(u)
-            u_min = torch.min(u)
-            v_max = torch.max(v)
-            v_min = torch.min(v)
+            u_max = torch.max(inputs)
+            u_min = torch.min(inputs)
+            v_max = torch.max(inputs)
+            v_min = torch.min(inputs)
             u = (u - u_min) / (u_max- u_min)
             v = (v - v_min) / (v_max - v_min)
 
-            ####### plotting ##########
+            ###### plotting ##########
             # fig, ax = plt.subplots(1, 4, figsize=(20, 6))
 
             # scatter_1 = ax[0].scatter(
@@ -566,8 +570,8 @@ class OperatorFieldMappingDataset(OperatorDataset):
 
             # plt.tight_layout()
             # plt.savefig(f"./temp.png")
-            # plt.show()
-            ###### end plotting ########
+            
+            #### end plotting ########
             u_data.append(u)
             v_data.append(v)    
 
@@ -594,70 +598,79 @@ if __name__ == "__main__":
     os.chdir(script_dir)  # Set script directory as working directory
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    nx, ny = 100, 200
+    nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 3000
-    nt = 400
+    num_simulations = 100
+    nt = 5000
     t0 = nt - 1
     d_min = 0.1
     d_max = 0.3
-    start_y = random.randint(0, int(nx / 2) - 1)
-    end_y = random.randint(start_y, nx - 1)    
-    start_x = random.randint(0, int(ny / 2) - 1)
-    end_x = random.randint(start_x, ny - 1)
-    dt = 5e-5
+    start_y = 4
+    end_y = 38  
+    start_x = 24
+    end_x = 98
+    dt = 1e-4  
     timestamp = datetime.datetime.now().strftime("%m%d_%H%M%S")
     noise_amplitude = 0.0
     n_blobs = 200
     radius = 5
-
-    save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
-                                        f"snapshot_{timestamp}_simulation_n{num_simulations}_nx{nx}_ny{ny}"
-                                        f"_dt{dt}_dmin{d_min}_dmax{d_max}_nblobs{n_blobs}_radius{radius}.pt")
+    quadratic_alpha = False  # If True, use quadratic alpha for diffusivity
+    snapshot_simulation = False  # If True, generate a snapshot simulation dataset
+    random_t = True  # If True, generate random snapshots; if False, use the last snapshot
     
+    if quadratic_alpha:
+        # Use d_min and d_max for din and dout respectively as per current variable names
+        save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
+                                    f"{"snapshot" if snapshot_simulation else ""}_{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}"
+                                    f"_dt{dt}_din{d_min}_dout{d_max}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}_random{random_t}.pt")
+        D = torch.full((ny, nx), d_max, device=device)
+        D[start_y:end_y, start_x:end_x] = d_min
+    else:
+        save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
+                                    f"{"snapshot" if snapshot_simulation else ""}_{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}"
+                                    f"_dt{dt}_dmin{d_min}_dmax{d_max}_nblobs{n_blobs}_radius{radius}_random{random_t}.pt")
+        D = create_blob_diffusivity(ny=ny, nx=nx, d_min=d_min, d_max=d_max, n_blobs=n_blobs, radius=radius, device=device)
+
     print(save_path_simulation)
     if not os.path.exists(os.path.dirname(save_path_simulation)):
         print("no such path")
         exit()
     
-    D = torch.full((ny, nx), d_max, device=device)
-    D[start_y:end_y, start_x:end_x] = d_min
-    
-    D = create_blob_diffusivity(ny=ny, nx=nx, d_min=d_min, d_max=d_max, n_blobs=n_blobs, radius=radius, device=device)
-
     plt.figure(figsize=(6, 5))
     plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
     plt.colorbar(label='Diffusion Coefficient')
     plt.savefig("diffusion_coefficient.png")
     plt.show()
 
-    # simulation_dataset = FullSimulationDataset(
-    #     num_simulations=num_simulations,
-    #     nx=nx,
-    #     ny=ny,
-    #     dx=dx,
-    #     dy=dy,
-    #     D=D,
-    #     nt=nt,
-    #     dt=dt,
-    #     noise_amplitude=noise_amplitude,
-    #     device=device,
-    #     save_path=save_path_simulation
-    # )
-
-    simulation_dataset = SnapshotsSimulationDataset(
-        num_simulations=num_simulations,
-        nx=nx,
-        ny=ny,
-        dx=dx,
-        dy=dy,
-        D=D,
-        nt=nt,
-        dt=dt,
-        noise_amplitude=noise_amplitude,
-        device=device,
-        save_path=save_path_simulation
-    )
+    if not snapshot_simulation:
+        simulation_dataset = FullSimulationDataset(
+            num_simulations=num_simulations,
+            nx=nx,
+            ny=ny,
+            dx=dx,
+            dy=dy,
+            D=D,
+            nt=nt,
+            dt=dt,
+            noise_amplitude=noise_amplitude,
+            device=device,
+            save_path=save_path_simulation
+        )
+    else:
+        simulation_dataset = SnapshotsSimulationDataset(
+            num_simulations=num_simulations,
+            random_t=random_t,  # Set to True to generate random snapshots
+            nx=nx,
+            ny=ny,
+            dx=dx,
+            dy=dy,
+            D=D,
+            nt=nt,
+            dt=dt,
+            noise_amplitude=noise_amplitude,
+            device=device,
+            save_path=save_path_simulation
+        )
     # ######################################################
 
     # ########### generate operator dataset ################

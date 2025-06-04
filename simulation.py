@@ -108,7 +108,7 @@ if __name__ == "__main__":
     # grid + time parameters
     nx, ny = 100, 200       # columns, rows
     dx, dy = 0.01, 0.01
-    nt, dt = 800, 1e-4
+    nt, dt = 5000, 1e-4
     d_min = 0.1
     d_max = 0.3
     start_y = random.randint(0, int(nx / 2) - 1)
@@ -124,18 +124,13 @@ if __name__ == "__main__":
     plt.figure(figsize=(6, 5))
     plt.imshow(D.cpu().numpy(), cmap='viridis', origin='lower')
     plt.colorbar(label='Diffusion Coefficient')
-    plt.show()  
+    plt.show()
+    plt.close()  
     
     T = simulate_simulation(nx=nx, ny=ny, dx=dx, dy=dy, nt=nt, dt=dt, D=D, noise_amplitude=0.0, device=device)
 
     # show initial condition
-    plt.figure(figsize=(6,5))
-    plt.imshow(T[0].cpu().numpy(), cmap='viridis', origin='lower')
-    plt.colorbar(label='Temperature')
-    plt.title("Initial Condition (t=0)")
-    plt.xlabel("w (columns)")
-    plt.ylabel("h (rows)")
-    plt.show()
+
 
     # animation
     import numpy as np
@@ -159,11 +154,13 @@ if __name__ == "__main__":
     ani = animation.FuncAnimation(
         fig, update, frames=frames, interval=30, blit=True
     )
-    plt.show()
+    # plt.show()
     plt.imshow(T[0].cpu().numpy(), cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
     plt.colorbar(label='Temperature')
     plt.savefig("simulation1.png")
+    plt.close()
 
     plt.imshow(T[nt-1].cpu().numpy(), cmap='viridis', origin='lower', vmin=vmin, vmax=vmax)
     plt.colorbar(label='Temperature')
     plt.savefig("simulation2.png")
+    plt.close()

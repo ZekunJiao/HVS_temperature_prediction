@@ -139,7 +139,6 @@ def visualize_dataset(dataset, n=1):
         print("y shape", y_sample.shape)
 
         # Remove channel dimension from v and get dimensions
-        print("u_sample", u_sample)
         y_sample = y_sample.squeeze(0)  # shape: (H, W)
         # Get observed coordinates from x_sample
         x_cols = x_sample[0].cpu().numpy()  # column coordinates
@@ -197,16 +196,16 @@ def main():
     ############################################
 
     ############### CREATE OPERATOR DATASET ###############
-    num_samples = 1000
+    num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0531_170703_simulation_n3000_nx100_ny200_dt5e-05_dmin0.1_dmax0.3_nblobs200_radius5.pt"
+    simulation_file = "snapshot_0602_174045_simulation_n2000_nt5000_nx100_ny100_dt0.0001_dmin0.1_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
     # Define a 4x4 grid of points, taking centers of subdivisions
-    num_points_x = 4
-    num_points_y = 4
+    num_points_x = 2
+    num_points_y = 2
     
     # Generate coordinates that are centers of subdivisions
     # For an interval [0, 1] and n points, coordinates are (i + 0.5) / n
@@ -217,14 +216,14 @@ def main():
     xx, yy = torch.meshgrid(x_coords, y_coords, indexing='ij') # 'ij' indexing for (H, W) style grid
     # Flatten and stack to get coordinates in the shape (num_total_points, 2)
     # where each row is [x, y]
-    points_2d = torch.stack([xx.flatten(), yy.flatten()], dim=1) 
-    
-    print("sensor coordinates shape:", points_2d.shape) # Should be torch.Size([16, 2])
-    print("sensor coordinates (first 5):", points_2d)
+    sensor_coordinates = torch.stack([xx.flatten(), yy.flatten()], dim=1).transpose(0, 1)
+
+    print("sensor coordinates shape:", sensor_coordinates.shape) # Should be torch.Size([2, 16]) for a 4x4 grid
+    print("sensor coordinates (first 5 columns):", sensor_coordinates[:, :5])
 
     dataset = OperatorFieldMappingDataset(
         num_samples=num_samples,
-        sensor_coordinates=points_2d,
+        sensor_coordinates=sensor_coordinates,
         observed_fraction=observed_fraction, 
         domain_fraction=domain_fraction,
         simulation_file_path=simulation_file_path,
@@ -239,7 +238,7 @@ def main():
     
     print(f"Dataset size: {len(dataset)} samples")
 
-    visualize_dataset(dataset, n=5)
+    visualize_dataset(dataset, n=10)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -255,8 +254,8 @@ def main():
     epochs = 200
     trunk_depth = 16
     branch_depth = 16
-    trunk_width = 32
-    branch_width = 32
+    trunk_width = 48
+    branch_width = 48
     batch_size = 32
     weight_decay = 0
     # Instantiate the operator using those variables
