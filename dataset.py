@@ -486,7 +486,7 @@ class OperatorFieldMappingDataset(OperatorDataset):
         N, H, W = inputs.shape
 
         if num_samples > N:
-            raise ValueError(f"num_samples ({num_samples}) cannot exceed available samples ({N}).")
+            num_samples = N
             
         print("input shape", inputs[0].shape)
         print(f" ############## Loading simulation dataset: {simulation_file_path}, size: {N} ##################")
@@ -516,62 +516,68 @@ class OperatorFieldMappingDataset(OperatorDataset):
             u_min = torch.min(inputs)
             v_max = torch.max(inputs)
             v_min = torch.min(inputs)
-            u = (u - u_min) / (u_max- u_min)
+            u = (u - u_min) / (u_max - u_min)
             v = (v - v_min) / (v_max - v_min)
 
-            ###### plotting ##########
-            # fig, ax = plt.subplots(1, 4, figsize=(20, 6))
-
-            # scatter_1 = ax[0].scatter(
-            #     x[0].cpu(), 
-            #     x[1].cpu(),
-            #     c=u.cpu(), 
-            #     cmap="viridis", 
-            #     vmin=0,
-            #     vmax=1,
-            # )
-            # ax[0].set_aspect("equal")
-            # cbar1 = fig.colorbar(scatter_1, ax=ax[0])
-            # cbar1.set_label("u value")
-
-            # scatter_2 = ax[1].scatter(
-            #     y[1].cpu(), 
-            #     y[0].cpu(),
-            #     c=v.cpu(), 
-            #     vmin=0,
-            #     vmax=1,
-            #     cmap="viridis", 
-            # )
-            # ax[1].set_aspect("equal")
-            # cbar2 = fig.colorbar(scatter_2, ax=ax[1])
-            # cbar2.set_label("v value")
-
-            # im_1 = ax[2].imshow(
-            #     inputs[i],
-            #     cmap="viridis", 
-            #     origin="lower",
-            #     vmin=0,
-            #     vmax=1,
-            # )
-            # ax[2].set_aspect("equal")
-            # cbar4 = fig.colorbar(im_1, ax=ax[2])
-            # cbar4.set_label("v value")
-
-            # im_2 = ax[3].imshow(
-            #     outputs[i],
-            #     cmap="viridis", 
-            #     origin="lower",
-            #     vmin=0,
-            #     vmax=1,
-            # )
-            # ax[3].set_aspect("equal")
-            # cbar4 = fig.colorbar(im_2, ax=ax[3])
-            # cbar4.set_label("v value")
-
-            # plt.tight_layout()
-            # plt.savefig(f"./temp.png")
+            print("u", u) 
+            print("v", v) 
+            print("inputs", inputs[i])
             
-            #### end plotting ########
+            plotting = False
+            if plotting:
+                # ##### plotting ##########
+                fig, ax = plt.subplots(1, 4, figsize=(20, 6))
+                scatter_1 = ax[0].scatter(
+                    x[0].cpu(), 
+                    x[1].cpu(),
+                    c=u.cpu(), 
+                    cmap="viridis", 
+                    vmin=0,
+                    vmax=1,
+                )
+                ax[0].set_aspect("equal")
+                cbar1 = fig.colorbar(scatter_1, ax=ax[0])
+                cbar1.set_label("u value")
+
+                scatter_2 = ax[1].scatter(
+                    y[1].cpu(), 
+                    y[0].cpu(),
+                    c=v.cpu(), 
+                    vmin=0,
+                    vmax=1,
+                    cmap="viridis", 
+                )
+                ax[1].set_aspect("equal")
+                cbar2 = fig.colorbar(scatter_2, ax=ax[1])
+                cbar2.set_label("v value")
+
+                im_1 = ax[2].imshow(
+                    inputs[i],
+                    cmap="viridis", 
+                    origin="lower",
+                    vmin=0,
+                    vmax=1,
+                )
+                ax[2].set_aspect("equal")
+                cbar4 = fig.colorbar(im_1, ax=ax[2])
+                cbar4.set_label("v value")
+
+                im_2 = ax[3].imshow(
+                    outputs[i],
+                    cmap="viridis", 
+                    origin="lower",
+                    vmin=0,
+                    vmax=1,
+                )
+                ax[3].set_aspect("equal")
+                cbar4 = fig.colorbar(im_2, ax=ax[3])
+                cbar4.set_label("v value")
+
+                plt.tight_layout()
+                plt.savefig(f"./temp.png")
+                plt.show()
+                plt.close()
+                ## end plotting ########
             u_data.append(u)
             v_data.append(v)    
 
@@ -600,7 +606,7 @@ if __name__ == "__main__":
 
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 100
+    num_simulations = 20
     nt = 5000
     t0 = nt - 1
     d_min = 0.1
@@ -615,19 +621,21 @@ if __name__ == "__main__":
     n_blobs = 200
     radius = 5
     quadratic_alpha = False  # If True, use quadratic alpha for diffusivity
-    snapshot_simulation = False  # If True, generate a snapshot simulation dataset
+    snapshot_simulation = True  # If True, generate a snapshot simulation dataset
     random_t = True  # If True, generate random snapshots; if False, use the last snapshot
     
     if quadratic_alpha:
         # Use d_min and d_max for din and dout respectively as per current variable names
-        save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
-                                    f"{"snapshot" if snapshot_simulation else ""}_{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}"
+        snapshot_prefix = "snapshot_" if snapshot_simulation else ""
+        save_path_simulation = os.path.join(script_dir, "datasets", "simulation", \
+                                    f"{snapshot_prefix}{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}" \
                                     f"_dt{dt}_din{d_min}_dout{d_max}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}_random{random_t}.pt")
         D = torch.full((ny, nx), d_max, device=device)
         D[start_y:end_y, start_x:end_x] = d_min
     else:
+        snapshot_prefix = "snapshot_" if snapshot_simulation else ""
         save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
-                                    f"{"snapshot" if snapshot_simulation else ""}_{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}"
+                                    f"{snapshot_prefix}{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}"
                                     f"_dt{dt}_dmin{d_min}_dmax{d_max}_nblobs{n_blobs}_radius{radius}_random{random_t}.pt")
         D = create_blob_diffusivity(ny=ny, nx=nx, d_min=d_min, d_max=d_max, n_blobs=n_blobs, radius=radius, device=device)
 

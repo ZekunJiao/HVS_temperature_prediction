@@ -29,17 +29,6 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
 
     for i in range(num_samples):
         x,u,y,v = test_dataset[i]
-        print("u shape pred", u.shape)
-        print("x shape pred", x.shape)
-        print("v shape pred", v.shape)
-        print("y shape pred", y.shape)
-        u_max = torch.max(u)
-        u_min = torch.min(u)
-        v_max = torch.max(v)
-        v_min = torch.min(v)
-        u = (u - u_min) / (u_max- u_min)
-        v = (v - v_min) / (v_max - v_min)
-
 
         x = x.to(device).unsqueeze(0)
         u = u.to(device).unsqueeze(0)
@@ -199,7 +188,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0602_174045_simulation_n2000_nt5000_nx100_ny100_dt0.0001_dmin0.1_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0604_092628_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -251,7 +240,7 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 200
+    epochs = 10
     trunk_depth = 16
     branch_depth = 16
     trunk_width = 48
