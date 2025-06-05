@@ -488,7 +488,6 @@ class OperatorFieldMappingDataset(OperatorDataset):
         if num_samples > N:
             num_samples = N
             
-        print("input shape", inputs[0].shape)
         print(f" ############## Loading simulation dataset: {simulation_file_path}, size: {N} ##################")
 
         u_data = []
@@ -518,10 +517,6 @@ class OperatorFieldMappingDataset(OperatorDataset):
             v_min = torch.min(inputs)
             u = (u - u_min) / (u_max - u_min)
             v = (v - v_min) / (v_max - v_min)
-
-            print("u", u) 
-            print("v", v) 
-            print("inputs", inputs[i])
             
             plotting = False
             if plotting:

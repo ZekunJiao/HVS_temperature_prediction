@@ -122,10 +122,6 @@ def visualize_dataset(dataset, n=1):
         x_sample = dataset.x[idx]  # shape: (2, num_observed)
         v_sample = dataset.v[idx]  # shape: (1, H, W)
         y_sample = dataset.y[idx]  # shape: (1, H, W)
-        print("u shape", u_sample.shape)
-        print("x shape", x_sample.shape)
-        print("v shape", v_sample.shape)
-        print("y shape", y_sample.shape)
 
         # Remove channel dimension from v and get dimensions
         y_sample = y_sample.squeeze(0)  # shape: (H, W)
@@ -188,7 +184,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0604_092628_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0602_174045_simulation_n2000_nt5000_nx100_ny100_dt0.0001_dmin0.1_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -240,7 +236,7 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 10
+    epochs = 200
     trunk_depth = 16
     branch_depth = 16
     trunk_width = 48
