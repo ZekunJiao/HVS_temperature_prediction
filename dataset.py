@@ -191,7 +191,10 @@ class SnapshotsSimulationDataset(td.Dataset):
 
             # Generate a random snapshot time index (0 to nt-1)
             if random_t:
-                t_snapshot = random.randint(0, nt - 1)
+                # Weights: higher for earlier timestamps. [nt, nt-1, ..., 1] for indices [0, 1, ..., nt-1]
+                time_indices = list(range(nt))
+                weights = [nt - i for i in time_indices] # Ensures earlier indices have higher weights
+                t_snapshot = random.choices(time_indices, weights=weights, k=1)[0]
                 
                 # Number of time steps to simulate to get the snapshot at t_snapshot
                 nt_for_simulation = t_snapshot + 1
