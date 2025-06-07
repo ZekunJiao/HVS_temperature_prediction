@@ -180,6 +180,7 @@ class SnapshotsSimulationDataset(td.Dataset):
         # start_x, start_y, end_x, end_y, # Removed
         noise_amplitude, 
         device,
+        n_sensor_timestamps,
         save_path
     ):
         
@@ -192,7 +193,7 @@ class SnapshotsSimulationDataset(td.Dataset):
             # Generate a random snapshot time index (0 to nt-1)
             if random_t:
                 # Weights: higher for earlier timestamps. [nt, nt-1, ..., 1] for indices [0, 1, ..., nt-1]
-                time_indices = list(range(nt))
+                time_indices = list(range(5, nt))
                 weights = [nt - i for i in time_indices] # Ensures earlier indices have higher weights
                 t_snapshot = random.choices(time_indices, weights=weights, k=1)[0]
                 
@@ -208,12 +209,14 @@ class SnapshotsSimulationDataset(td.Dataset):
                                            D=D, # Use the provided D map
                                            noise_amplitude=noise_amplitude, device=device)
             
-            # Input and output are the same snapshot
-            # T_series will have shape (nt_for_simulation, ny, nx)
-            # So, T_series[t_snapshot] is the last computed step.
-            snapshot_data = T_series[t_snapshot].cpu()
-            inputs.append(snapshot_data)
-            outputs.append(snapshot_data)
+            # T_series has shape (nt_for_simulation, ny, nx)
+            
+            # Collect the five frames immediately before t_snapshot:
+            # indices [t_snapshot-5, t_snapshot-4, ..., t_snapshot-1]
+            seq_start = t_snapshot - n_sensor_timestamps
+            seq_end = t_snapshot  # slice is exclusive at the end
+            input_fields = T_series[seq_start:seq_end].cpu()  # shape (5, ny, nx)
+            output_field = T_series[t_snapshot].cpu()   
 
             # plt.figure()  # Create a new figure for the initial temperature field
             # plt.imshow(T_series[t0].cpu(), cmap="viridis", origin="lower")
@@ -228,10 +231,14 @@ class SnapshotsSimulationDataset(td.Dataset):
             # plt.savefig(f"./temp_final.png")
             # plt.close()  # Close the figure to free memory
 
+            inputs.append(input_fields)
+            outputs.append(output_field)
             del T_series
             torch.cuda.empty_cache()
         self.inputs = torch.stack(inputs)
         self.outputs = torch.stack(outputs)
+
+
 
         torch.save({
             'inputs':  self.inputs,
@@ -481,118 +488,133 @@ class OperatorFieldMappingDataset(OperatorDataset):
             simulation_file_path: Path to the simulation dataset file.
             save_path: Path to save the generated dataset.
         '''
-        
-        simulation_dataset = torch.load(simulation_file_path, map_location="cpu")
 
-        inputs = simulation_dataset["inputs"]
-        outputs = simulation_dataset["outputs"]
-        N, H, W = inputs.shape
+        # Load the simulation dataset; now inputs has shape (N, 5, H, W)
+        simulation_dataset = torch.load(simulation_file_path, map_location="cpu")
+        inputs = simulation_dataset["inputs"]   # shape: (N, seq_len, H, W)
+        outputs = simulation_dataset["outputs"] # shape: (N, H, W)
+        N, seq_len, H, W = inputs.shape
 
         if num_samples > N:
             num_samples = N
-            
+
         print(f" ############## Loading simulation dataset: {simulation_file_path}, size: {N} ##################")
 
         u_data = []
         v_data = []
 
-        h_grid, w_grid = torch.meshgrid(torch.linspace(0, 1, H), torch.linspace(0, 1, W), indexing="ij")
-        # normalize the coordinates
-        y = torch.stack([h_grid, w_grid]) # shape: (2, H, W)
+        # Build the spatial grid y of shape (2, H, W)
+        h_grid, w_grid = torch.meshgrid(
+            torch.linspace(0, 1, H), 
+            torch.linspace(0, 1, W), 
+            indexing="ij"
+        )
+        y = torch.stack([h_grid, w_grid])  # shape: (2, H, W)
 
+        # Determine sensor locations x of shape (2, num_sensors)
         if sensor_coordinates is not None:
-            # Use the provided sensor coordinates
-            x = sensor_coordinates
+            x = sensor_coordinates  # assume already normalized in [0,1]
         else:
-            x = create_x(T_input=inputs[0], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
+            # Use the first time‐slice to generate sensor mask; create_x should return (2, num_sensors)
+            x = create_x(T_input=inputs[0, 0], observed_fraction=observed_fraction, domain_fraction=domain_fraction)
+
+        # Precompute global min/max over all inputs (all samples and all time steps)
+        u_global_max = torch.max(inputs)
+        u_global_min = torch.min(inputs)
+        # (Optional) If you want to normalize outputs based on outputs themselves, 
+        # you could compute v_global_max/min similarly:
+        # v_global_max = torch.max(outputs)
+        # v_global_min = torch.min(outputs)
 
         for i in range(num_samples):
-            cols = (x[0] * (W - 1)).round().long()  # x[0] → columns, scale by W-1
-            rows = (x[1] * (H - 1)).round().long()  # x[1] → rows,    scale by H-1
+            # Convert normalized sensor coords x (in [0,1]) to integer row/col indices
+            cols = (x[0] * (W - 1)).round().long()  # x[0] → columns
+            rows = (x[1] * (H - 1)).round().long()  # x[1] → rows
 
-            u = inputs[i, rows, cols]  
-            
-            v = outputs[i]
-            # normalize function values
-            u_max = torch.max(inputs)
-            u_min = torch.min(inputs)
-            v_max = torch.max(inputs)
-            v_min = torch.min(inputs)
-            u = (u - u_min) / (u_max - u_min)
-            v = (v - v_min) / (v_max - v_min)
-            
+            # Extract sensor readings for each of the seq_len time frames:
+            # inputs[i] has shape (seq_len, H, W), so indexing gives (seq_len, num_sensors)
+            u_seq = inputs[i, :, rows, cols]  # shape: (seq_len, num_sensors)
+
+            # Normalize u_seq using global min/max from inputs
+            u_seq = (u_seq - u_global_min) / (u_global_max - u_global_min)
+
+            # Output field v (single frame) has shape (H, W)
+            v_field = outputs[i]
+            # Normalize v_field using the same global min/max from inputs
+            v_field = (v_field - u_global_min) / (u_global_max - u_global_min)
+            # If you prefer using v's own min/max, uncomment below instead:
+            # v_field = (v_field - v_global_min) / (v_global_max - v_global_min)
+
+            # (Optional) plotting/debugging
             plotting = False
             if plotting:
-                # ##### plotting ##########
-                fig, ax = plt.subplots(1, 4, figsize=(20, 6))
+                fig, ax = plt.subplots(1, 3, figsize=(18, 5))
+
+                # Plot the last snapshot in the sequence at sensor locations
+                last_frame = inputs[i, -1].cpu()
                 scatter_1 = ax[0].scatter(
-                    x[0].cpu(), 
+                    x[0].cpu(),
                     x[1].cpu(),
-                    c=u.cpu(), 
-                    cmap="viridis", 
+                    c=u_seq[-1].cpu(),
+                    cmap="viridis",
                     vmin=0,
                     vmax=1,
                 )
                 ax[0].set_aspect("equal")
                 cbar1 = fig.colorbar(scatter_1, ax=ax[0])
-                cbar1.set_label("u value")
+                cbar1.set_label("u (last frame)")
 
-                scatter_2 = ax[1].scatter(
-                    y[1].cpu(), 
-                    y[0].cpu(),
-                    c=v.cpu(), 
+                # Plot the full output field v_field
+                im_1 = ax[1].imshow(
+                    v_field.cpu(),
+                    cmap="viridis",
+                    origin="lower",
                     vmin=0,
                     vmax=1,
-                    cmap="viridis", 
                 )
                 ax[1].set_aspect("equal")
-                cbar2 = fig.colorbar(scatter_2, ax=ax[1])
-                cbar2.set_label("v value")
+                cbar2 = fig.colorbar(im_1, ax=ax[1])
+                cbar2.set_label("v (normalized)")
 
-                im_1 = ax[2].imshow(
-                    inputs[i],
-                    cmap="viridis", 
-                    origin="lower",
+                # Plot one of the intermediate frames from u_seq (e.g., first)
+                scatter_2 = ax[2].scatter(
+                    x[0].cpu(),
+                    x[1].cpu(),
+                    c=u_seq[0].cpu(),
+                    cmap="viridis",
                     vmin=0,
                     vmax=1,
                 )
                 ax[2].set_aspect("equal")
-                cbar4 = fig.colorbar(im_1, ax=ax[2])
-                cbar4.set_label("v value")
-
-                im_2 = ax[3].imshow(
-                    outputs[i],
-                    cmap="viridis", 
-                    origin="lower",
-                    vmin=0,
-                    vmax=1,
-                )
-                ax[3].set_aspect("equal")
-                cbar4 = fig.colorbar(im_2, ax=ax[3])
-                cbar4.set_label("v value")
+                cbar3 = fig.colorbar(scatter_2, ax=ax[2])
+                cbar3.set_label("u (first frame)")
 
                 plt.tight_layout()
-                plt.savefig(f"./temp.png")
+                plt.savefig(f"./debug_sample_{i}.png")
                 plt.show()
                 plt.close()
-                ## end plotting ########
-            u_data.append(u)
-            v_data.append(v)    
 
-        x = x.unsqueeze(0).expand(num_samples, *x.shape)
-        y = y.unsqueeze(0).expand(num_samples, *y.shape)
-        u = torch.stack(u_data)
-        v = torch.stack(v_data)
+            u_data.append(u_seq)      # (seq_len, num_sensors)
+            v_data.append(v_field)    # (H, W)
 
-        u = torch.unsqueeze(u, dim=1)
-        v = torch.unsqueeze(v, dim=1)
+        # Stack into tensors:
+        # u_stack: (num_samples, seq_len, num_sensors)
+        u_stack = torch.stack(u_data)  
+        # v_stack: (num_samples, H, W) → add channel dim → (num_samples, 1, H, W)
+        v_stack = torch.stack(v_data).unsqueeze(1)
 
-        super().__init__(u=u, v=v, x=x, y=y)
+        # Expand x and y to have batch dimension:
+        # x: (2, num_sensors) → (1, 2, num_sensors) → (num_samples, 2, num_sensors)
+        x_batch = x.unsqueeze(0).expand(num_samples, *x.shape)
+        # y: (2, H, W) → (1, 2, H, W) → (num_samples, 2, H, W)
+        y_batch = y.unsqueeze(0).expand(num_samples, *y.shape)
+
+        # Call parent constructor: u has shape (N, C_in, M), v has shape (N, C_out, H, W)
+        super().__init__(u=u_stack, v=v_stack, x=x_batch, y=y_batch)
 
         if save_path:
             torch.save(self, save_path)
             print(f"Dataset saved at {save_path}")
-
 
 if __name__ == "__main__": 
     '''
@@ -609,6 +631,7 @@ if __name__ == "__main__":
     t0 = nt - 1
     d_min = 0.1
     d_max = 0.3
+    n_sensor_timestamps = 20
     start_y = 4
     end_y = 38  
     start_x = 24
@@ -627,14 +650,14 @@ if __name__ == "__main__":
         snapshot_prefix = "snapshot_" if snapshot_simulation else ""
         save_path_simulation = os.path.join(script_dir, "datasets", "simulation", \
                                     f"{snapshot_prefix}{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}" \
-                                    f"_dt{dt}_din{d_min}_dout{d_max}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}_random{random_t}.pt")
+                                    f"_dt{dt}_din{d_min}_ntsensor{n_sensor_timestamps}_dout{d_max}_sy{start_y}_ey{end_y}_sx{start_x}_ex{end_x}_random{random_t}.pt")
         D = torch.full((ny, nx), d_max, device=device)
         D[start_y:end_y, start_x:end_x] = d_min
     else:
         snapshot_prefix = "snapshot_" if snapshot_simulation else ""
         save_path_simulation = os.path.join(script_dir, "datasets", "simulation", 
                                     f"{snapshot_prefix}{timestamp}_simulation_n{num_simulations}_nt{nt}_nx{nx}_ny{ny}"
-                                    f"_dt{dt}_dmin{d_min}_dmax{d_max}_nblobs{n_blobs}_radius{radius}_random{random_t}.pt")
+                                    f"_dt{dt}_dmin{d_min}_ntsensor{n_sensor_timestamps}_dmax{d_max}_nblobs{n_blobs}_radius{radius}_random{random_t}.pt")
         D = create_blob_diffusivity(ny=ny, nx=nx, d_min=d_min, d_max=d_max, n_blobs=n_blobs, radius=radius, device=device)
 
     print(save_path_simulation)
@@ -673,6 +696,7 @@ if __name__ == "__main__":
             D=D,
             nt=nt,
             dt=dt,
+            n_sensor_timestamps=n_sensor_timestamps,
             noise_amplitude=noise_amplitude,
             device=device,
             save_path=save_path_simulation

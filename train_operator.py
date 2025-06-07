@@ -12,7 +12,7 @@ from dataset import OperatorFieldMappingDataset
 from continuiti.trainer.scheduler import LinearLRScheduler
 from continuiti.trainer.callbacks import PrintTrainingLoss, Logs
 import math
-
+from lstm_model import *
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 
@@ -184,7 +184,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0602_174045_simulation_n2000_nt5000_nx100_ny100_dt0.0001_dmin0.1_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0606_140305_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -223,7 +223,7 @@ def main():
     
     print(f"Dataset size: {len(dataset)} samples")
 
-    visualize_dataset(dataset, n=10)
+    # visualize_dataset(dataset, n=10)
 
     if len(dataset) > 1:
         train_dataset, test_dataset = split(dataset, 0.8)
@@ -280,12 +280,12 @@ def main():
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
     log_dir = f"runs/{timestamp}"
     writer = SummaryWriter(log_dir=log_dir)
-
+    lstm_network = LSTM()
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
     mse_loss = torch.nn.MSELoss()
-
+    lstm_network.to(device)
     hparam_text = "\n".join(f"{key}: {value}" for key, value in hparams.items())   
 
     if log_tensorboard:
@@ -293,11 +293,13 @@ def main():
 
     steps = math.ceil(len(train_dataset) / batch_size)
     print_loss_callback = PrintTrainingLoss(epochs, steps)
-
+    lstm_model = LSTM()
+    
     # Training
     for epoch in range(epochs):
         loss_train = 0.0
         operator.train()
+        lstm_network.train()
         
         logs = Logs(epoch=epoch + 1, step=0, loss_train=None, loss_test=None)
         for x, u, y, v in train_loader:
@@ -306,7 +308,10 @@ def main():
             u = u.to(device)
             y = y.to(device)
             v = v.to(device)
-
+            # use LSTMS to condense sensor data#
+            #  u = LSTM(u)
+            u = lstm_network(u)
+            u = u[:,-1,:]
             pred = operator(x, u, y)
             pred = pred.reshape(pred.shape)
             loss = mse_loss(pred, v)
@@ -325,6 +330,7 @@ def main():
 
         if test_dataset is not None:
             operator.eval()
+            lstm_network.eval()
             loss_eval = 0.0
             with torch.no_grad():
                 for x, u, y, v in val_loader:
@@ -332,6 +338,8 @@ def main():
                     u = u.to(device)
                     y = y.to(device)
                     v = v.to(device)
+                    u = lstm_network(u)
+                    u = u[:,-1,:]
                     pred = operator(x, u, y)
                     pred = pred.reshape(v.shape)
 
