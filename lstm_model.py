@@ -8,4 +8,4 @@ class LSTM(nn.Module):
     def forward(self, x):
         x, h = self.lstm(x)
         x = self.linear(x)
-        return x+*
+        return x

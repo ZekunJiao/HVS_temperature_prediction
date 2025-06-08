@@ -184,7 +184,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0606_140305_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0608_164903_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -312,6 +312,8 @@ def main():
             #  u = LSTM(u)
             u = lstm_network(u)
             u = u[:,-1,:]
+            u = u.unsqueeze(1)
+            print("u shape: ", u.shape)
             pred = operator(x, u, y)
             pred = pred.reshape(pred.shape)
             loss = mse_loss(pred, v)
