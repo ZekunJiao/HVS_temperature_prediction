@@ -6,6 +6,7 @@ import random
 import os
 from datetime import datetime
 from torch.utils.data import DataLoader
+from continuiti.operators.shape import OperatorShapes, TensorShape
 
 from torch.utils.tensorboard import SummaryWriter
 from dataset import OperatorFieldMappingDataset
@@ -243,9 +244,17 @@ def main():
     branch_width = 48
     batch_size = 32
     weight_decay = 0
+    new_u_shape = TensorShape(dim=1, size=([4]))
+    modified_shapes = OperatorShapes(
+        x=dataset.shapes.x,
+        u=new_u_shape,
+        y=dataset.shapes.y,
+        v=dataset.shapes.v,
+    )
+
     # Instantiate the operator using those variables
     operator = DeepCatOperator(
-        shapes=dataset.shapes, 
+        shapes=modified_shapes, 
         device=device, 
         trunk_depth=trunk_depth, 
         branch_depth=branch_depth, 
@@ -254,6 +263,10 @@ def main():
     )
 
     operator = operator.to(device)
+    
+    lstm_network = LSTM()
+    lstm_network.to(device)
+
     optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3, weight_decay=weight_decay)
     scheduler = LinearLRScheduler(optimizer=optimizer, max_epochs=epochs)
 
@@ -280,12 +293,10 @@ def main():
     timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
     log_dir = f"runs/{timestamp}"
     writer = SummaryWriter(log_dir=log_dir)
-    lstm_network = LSTM()
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
     mse_loss = torch.nn.MSELoss()
-    lstm_network.to(device)
     hparam_text = "\n".join(f"{key}: {value}" for key, value in hparams.items())   
 
     if log_tensorboard:
@@ -309,10 +320,9 @@ def main():
             y = y.to(device)
             v = v.to(device)
             # use LSTMS to condense sensor data#
-            #  u = LSTM(u)
             u = lstm_network(u)
             u = u[:,-1,:]
-            u = u.unsqueeze(1)
+            u = torch.unsqueeze(u, 1)
             print("u shape: ", u.shape)
             pred = operator(x, u, y)
             pred = pred.reshape(pred.shape)
