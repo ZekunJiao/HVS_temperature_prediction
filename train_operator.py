@@ -17,7 +17,7 @@ from lstm_model import *
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
 
-def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu', save_folder="result", filename=None, log_dir=None):
+def visualize_predictions(operator, lstm_network, test_dataset, num_samples, mode, device='cpu', save_folder="result", filename=None, log_dir=None):
     operator.eval()
     operator.to(device)
 
@@ -29,30 +29,38 @@ def visualize_predictions(operator, test_dataset, num_samples, mode, device='cpu
     fig, axes = plt.subplots(num_samples, 3, figsize=(12, 4 * num_samples))
 
     for i in range(num_samples):
-        x,u,y,v = test_dataset[i]
+        x,u_raw,y,v = test_dataset[i]
 
         x = x.to(device).unsqueeze(0)
-        u = u.to(device).unsqueeze(0)
+        u_raw = u_raw.to(device).unsqueeze(0)
+        print("u_raw shape: ", u_raw.shape)
         y = y.to(device).unsqueeze(0)
 
-        with torch.no_grad():
-            prediction = operator(x, u, y).cpu().squeeze()
+        if lstm_network is not None:
+            with torch.no_grad():
+                print("using lstm")
+                u = lstm_network(u_raw)  # Apply LSTM to condense sensor data
+                u = u[:,-1,:]
+                u = torch.unsqueeze(u, 1)  # Reshape to match expected input shape
+                prediction = operator(x, u, y).cpu().squeeze()
+        else:
+            with torch.no_grad():
+                print("not using lstm") 
+                prediction = operator(x, u_raw, y).cpu().squeeze()
         
         # Select row of subplots
         x = x.squeeze().cpu()
-        u = u.squeeze().cpu()
+        u_raw = u_raw.squeeze().cpu()
         y = y.squeeze().cpu()
         v = v.squeeze().cpu()
         prediction = prediction.squeeze().cpu().numpy()
 
-        x_min = y[0].min()
-        x_max = y[0].max()
-        print("prediction: u", u)
+        print("values: u_raw", u_raw)
         
         ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
         ax1.set_title("Input")
-        im1 = ax1.scatter(x[0,:], x[1,:], c=u, cmap="viridis", vmin=0, vmax=1)
+        im1 = ax1.scatter(x[0,:], x[1,:], c=u_raw[-1], cmap="viridis", vmin=0, vmax=1)
         ax1.set_xlim(y[0].min(), y[0].max())
         ax1.set_ylim(y[1].min(), y[1].max())
         ax1.set_aspect("equal")
@@ -185,7 +193,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0608_164903_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0611_060535_simulation_n10_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -237,13 +245,14 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 200
+    epochs = 1000
     trunk_depth = 16
     branch_depth = 16
     trunk_width = 48
     branch_width = 48
     batch_size = 32
     weight_decay = 0
+    lstm = True
     new_u_shape = TensorShape(dim=1, size=([4]))
     modified_shapes = OperatorShapes(
         x=dataset.shapes.x,
@@ -286,7 +295,9 @@ def main():
         'total_params': total_params,
         'dataset_name': data_file_name,
         'weight_decay': weight_decay,
-        'scheduler': scheduler.__class__.__name__
+        'scheduler': scheduler.__class__.__name__,
+        'batch_size': batch_size,
+        'lstm': lstm,
     }
 
     # Create TensorBoard logger
@@ -304,7 +315,6 @@ def main():
 
     steps = math.ceil(len(train_dataset) / batch_size)
     print_loss_callback = PrintTrainingLoss(epochs, steps)
-    lstm_model = LSTM()
     
     # Training
     for epoch in range(epochs):
@@ -319,11 +329,15 @@ def main():
             u = u.to(device)
             y = y.to(device)
             v = v.to(device)
+
             # use LSTMS to condense sensor data#
-            u = lstm_network(u)
-            u = u[:,-1,:]
-            u = torch.unsqueeze(u, 1)
-            print("u shape: ", u.shape)
+            if lstm:
+                print("using lstm")
+                u = lstm_network(u)
+                u = u[:,-1,:]
+                u = torch.unsqueeze(u, 1)
+            else:
+                u = u[:, -1]
             pred = operator(x, u, y)
             pred = pred.reshape(pred.shape)
             loss = mse_loss(pred, v)
@@ -373,8 +387,8 @@ def main():
     # trainer = Trainer(operator=operator)
     # trainer.fit(epochs=epochs, callbacks=callbacks, dataset=train_dataset, test_dataset=test_dataset)
 
-    visualize_predictions(operator, train_dataset, num_samples=10, mode="train", device=device, log_dir=log_dir)
-    visualize_predictions(operator, test_dataset, num_samples=10, mode="test", device=device, log_dir=log_dir)
+    visualize_predictions(operator, lstm_network, train_dataset, num_samples=1, mode="train", device=device, log_dir=log_dir)
+    visualize_predictions(operator,lstm_network, test_dataset, num_samples=1, mode="test", device=device, log_dir=log_dir)
 
 
 if __name__ == "__main__":

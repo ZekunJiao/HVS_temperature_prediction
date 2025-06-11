@@ -193,7 +193,7 @@ class SnapshotsSimulationDataset(td.Dataset):
             # Generate a random snapshot time index (0 to nt-1)
             if random_t:
                 # Weights: higher for earlier timestamps. [nt, nt-1, ..., 1] for indices [0, 1, ..., nt-1]
-                time_indices = list(range(5, nt))
+                time_indices = list(range(n_sensor_timestamps, nt))
                 weights = [nt - i for i in time_indices] # Ensures earlier indices have higher weights
                 t_snapshot = random.choices(time_indices, weights=weights, k=1)[0]
                 
@@ -216,6 +216,7 @@ class SnapshotsSimulationDataset(td.Dataset):
             seq_start = t_snapshot - n_sensor_timestamps
             seq_end = t_snapshot  # slice is exclusive at the end
             input_fields = T_series[seq_start:seq_end].cpu()  # shape (5, ny, nx)
+            print(f"  Input fields shape: {input_fields.shape}")
             output_field = T_series[t_snapshot].cpu()   
 
             # plt.figure()  # Create a new figure for the initial temperature field
@@ -237,8 +238,6 @@ class SnapshotsSimulationDataset(td.Dataset):
             torch.cuda.empty_cache()
         self.inputs = torch.stack(inputs)
         self.outputs = torch.stack(outputs)
-
-
 
         torch.save({
             'inputs':  self.inputs,
@@ -626,7 +625,7 @@ if __name__ == "__main__":
 
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 20
+    num_simulations = 1000
     nt = 5000
     t0 = nt - 1
     d_min = 0.1
