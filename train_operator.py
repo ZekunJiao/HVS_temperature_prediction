@@ -46,7 +46,8 @@ def visualize_predictions(operator, lstm_network, test_dataset, num_samples, mod
         else:
             with torch.no_grad():
                 print("not using lstm") 
-                prediction = operator(x, u_raw, y).cpu().squeeze()
+                u = u_raw[:, -1]
+                prediction = operator(x, u, y).cpu().squeeze()
         
         # Select row of subplots
         x = x.squeeze().cpu()
@@ -193,7 +194,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0611_060535_simulation_n10_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0608_164903_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -252,9 +253,11 @@ def main():
     branch_width = 48
     batch_size = 32
     weight_decay = 0
-    lstm = True
-    new_u_shape = TensorShape(dim=1, size=([4]))
-    modified_shapes = OperatorShapes(
+    lstm = args.use_lstm
+
+    num_sensors = sensor_coordinates.shape[1]
+    new_u_shape = TensorShape(dim=1, size=([num_sensors]))
+    operator_shapes = OperatorShapes(
         x=dataset.shapes.x,
         u=new_u_shape,
         y=dataset.shapes.y,
@@ -263,7 +266,7 @@ def main():
 
     # Instantiate the operator using those variables
     operator = DeepCatOperator(
-        shapes=modified_shapes, 
+        shapes=operator_shapes, 
         device=device, 
         trunk_depth=trunk_depth, 
         branch_depth=branch_depth, 
@@ -273,10 +276,17 @@ def main():
 
     operator = operator.to(device)
     
-    lstm_network = LSTM()
-    lstm_network.to(device)
+    lstm_network = None
+    if lstm:
+        lstm_network = LSTM().to(device)
+        optimizer = torch.optim.Adam(
+            list(operator.parameters()) + list(lstm_network.parameters()),
+            lr=1e-3,
+            weight_decay=weight_decay
+        )
+    else:
+        optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3, weight_decay=weight_decay)
 
-    optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3, weight_decay=weight_decay)
     scheduler = LinearLRScheduler(optimizer=optimizer, max_epochs=epochs)
 
     # Count parameters
@@ -306,7 +316,6 @@ def main():
     writer = SummaryWriter(log_dir=log_dir)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     val_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
-    optimizer = torch.optim.Adam(operator.parameters(), lr=1e-3)
     mse_loss = torch.nn.MSELoss()
     hparam_text = "\n".join(f"{key}: {value}" for key, value in hparams.items())   
 
@@ -320,7 +329,8 @@ def main():
     for epoch in range(epochs):
         loss_train = 0.0
         operator.train()
-        lstm_network.train()
+        if lstm:
+            lstm_network.train()
         
         logs = Logs(epoch=epoch + 1, step=0, loss_train=None, loss_test=None)
         for x, u, y, v in train_loader:
@@ -356,7 +366,8 @@ def main():
 
         if test_dataset is not None:
             operator.eval()
-            lstm_network.eval()
+            if lstm:
+                lstm_network.eval()
             loss_eval = 0.0
             with torch.no_grad():
                 for x, u, y, v in val_loader:
@@ -364,8 +375,12 @@ def main():
                     u = u.to(device)
                     y = y.to(device)
                     v = v.to(device)
-                    u = lstm_network(u)
-                    u = u[:,-1,:]
+                    if lstm:
+                        u = lstm_network(u)
+                        u = u[:,-1,:]
+                        u = torch.unsqueeze(u, 1)
+                    else:
+                        u = u[:, -1]
                     pred = operator(x, u, y)
                     pred = pred.reshape(v.shape)
 
