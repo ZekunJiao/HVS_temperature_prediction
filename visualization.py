@@ -184,10 +184,12 @@ def plot_autocorrelation(series, max_lag: int = 50):
         raise ValueError("`max_lag` must be non-negative.")
 
     # Prepare figure
+    import matplotlib.pyplot as plt
     fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(8, 6), sharex=False, gridspec_kw={'height_ratios': [2, 1]})
 
     # --- Top: Sensor values over time ---
-    for i in range(n_sensors):
+    for i in range(1):
+        print("sensor value", series_np[:, i])
         ax_top.plot(np.arange(n_time), series_np[:, i], label=f"Sensor {i+1}")
     ax_top.set_ylabel("Sensor Value")
     ax_top.set_title("Sensor Values Over Time (all sensors)")
@@ -196,15 +198,16 @@ def plot_autocorrelation(series, max_lag: int = 50):
         ax_top.legend(loc="best", fontsize="small")
 
     # --- Bottom: Autocorrelation for each sensor ---
-    ks = np.arange(max_lag + 1)
-    for i in range(n_sensors):
+    for i in range(1):
         s = series_np[:, i]
         s_centered = s - s.mean()
         ac_full = np.correlate(s_centered, s_centered, mode="full")
         mid = len(ac_full) // 2
-        r = ac_full[mid : mid + max_lag + 1]
+        max_lag_i = min(max_lag, len(s) - 1)
+        r = ac_full[mid : mid + max_lag_i + 1]
         if r[0] != 0:
             r = r / r[0]
+        ks = np.arange(len(r))
         ax_bot.plot(ks, r, label=f"Sensor {i+1}")
     ax_bot.set_xlabel("Lag k")
     ax_bot.set_ylabel("Autocorrelation R(k)")
@@ -215,6 +218,7 @@ def plot_autocorrelation(series, max_lag: int = 50):
 
     plt.tight_layout()
     plt.show()
+
 
 # ---------------------------------------------------------------------------------- 
 

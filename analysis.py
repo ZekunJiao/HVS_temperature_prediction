@@ -42,7 +42,7 @@ def main():
         u = dataset.u  # (num_samples, seq_len, num_sensors)
         n_samples, seq_len, n_sensors = u.shape
         # Reshape to (n_samples * seq_len, n_sensors)
-        data_series = u.reshape(-1, n_sensors)
+        data_series = u[0]
         try:
             plot_autocorrelation(data_series, max_lag=50)
         except Exception as e:
