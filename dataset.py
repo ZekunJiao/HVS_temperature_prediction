@@ -625,12 +625,12 @@ if __name__ == "__main__":
 
     nx, ny = 100, 100
     dx, dy = 0.01, 0.01
-    num_simulations = 1000
-    nt = 5000
+    num_simulations = 100
+    nt = 2000
     t0 = nt - 1
     d_min = 0.1
     d_max = 0.3
-    n_sensor_timestamps = 20
+    n_sensor_timestamps = 1000
     start_y = 4
     end_y = 38  
     start_x = 24

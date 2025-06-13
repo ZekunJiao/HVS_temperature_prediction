@@ -4,6 +4,8 @@ import random
 import os
 from datetime import datetime
 from torch.utils.tensorboard import SummaryWriter
+import numpy as np
+from dataset import OperatorFieldMappingDataset
 
 def visualize_predictions(operator, lstm_network, test_dataset, num_samples, mode, device='cpu', save_folder="result", filename=None, log_dir=None):
     operator.eval()
@@ -153,3 +155,66 @@ def visualize_dataset(dataset, n=1):
     plt.suptitle(f"Dataset Visualization: {n_samples} samples")
     plt.savefig("dataset_visualization.png")
     plt.show() 
+
+# ----------------------------------------------------------------------------------
+# Autocorrelation plotting utility
+# ----------------------------------------------------------------------------------
+
+def plot_autocorrelation(series, max_lag: int = 50):
+    """Plot the autocorrelation function R(k) up to ``max_lag`` for all sensors in a 2D array.
+
+    Args:
+        series (np.ndarray | torch.Tensor): 2-D data array (time, sensors) or 1-D (time,).
+        max_lag (int, optional): Maximum lag to display. Defaults to ``50``.
+    """
+    # Convert to NumPy array if a torch tensor is provided
+    if isinstance(series, torch.Tensor):
+        series_np = series.detach().cpu().numpy()
+    else:
+        series_np = np.asarray(series)
+
+    if series_np.ndim == 1:
+        series_np = series_np[:, None]  # (time,) -> (time, 1)
+    elif series_np.ndim != 2:
+        raise ValueError("`series` must be 1-D or 2-D (time, sensors).")
+
+    n_time, n_sensors = series_np.shape
+    max_lag = int(max_lag)
+    if max_lag < 0:
+        raise ValueError("`max_lag` must be non-negative.")
+
+    # Prepare figure
+    fig, (ax_top, ax_bot) = plt.subplots(2, 1, figsize=(8, 6), sharex=False, gridspec_kw={'height_ratios': [2, 1]})
+
+    # --- Top: Sensor values over time ---
+    for i in range(n_sensors):
+        ax_top.plot(np.arange(n_time), series_np[:, i], label=f"Sensor {i+1}")
+    ax_top.set_ylabel("Sensor Value")
+    ax_top.set_title("Sensor Values Over Time (all sensors)")
+    ax_top.grid(True, linestyle="--", alpha=0.7)
+    if n_sensors <= 10:
+        ax_top.legend(loc="best", fontsize="small")
+
+    # --- Bottom: Autocorrelation for each sensor ---
+    ks = np.arange(max_lag + 1)
+    for i in range(n_sensors):
+        s = series_np[:, i]
+        s_centered = s - s.mean()
+        ac_full = np.correlate(s_centered, s_centered, mode="full")
+        mid = len(ac_full) // 2
+        r = ac_full[mid : mid + max_lag + 1]
+        if r[0] != 0:
+            r = r / r[0]
+        ax_bot.plot(ks, r, label=f"Sensor {i+1}")
+    ax_bot.set_xlabel("Lag k")
+    ax_bot.set_ylabel("Autocorrelation R(k)")
+    ax_bot.set_title(f"Autocorrelation (max lag = {max_lag})")
+    ax_bot.grid(True, linestyle="--", alpha=0.7)
+    if n_sensors <= 10:
+        ax_bot.legend(loc="best", fontsize="small")
+
+    plt.tight_layout()
+    plt.show()
+
+# ---------------------------------------------------------------------------------- 
+

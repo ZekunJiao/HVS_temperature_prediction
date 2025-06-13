@@ -14,7 +14,7 @@ from continuiti.trainer.scheduler import LinearLRScheduler
 from continuiti.trainer.callbacks import PrintTrainingLoss, Logs
 import math
 from lstm_model import *
-from visualization import visualize_predictions, visualize_dataset
+from visualization import visualize_predictions
 from trainer import Trainer
 # Initialize TensorBoard writer
 timestamp = datetime.now().strftime("%m-%d_%H-%M-%S")
@@ -32,7 +32,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0611_080748_simulation_n1000_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0613_101159_simulation_n100_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -160,21 +160,100 @@ def main():
     if log_tensorboard:
         writer.add_text("Hyperparameters", hparam_text)
 
-    trainer = Trainer(
+    # -------------------------------------------------------------
+    #  THREE-STAGE TRAINING PIPELINE
+    #  Stage 1 : train Operator only
+    #  Stage 2 : train LSTM only (Operator frozen)
+    #  Stage 3 : fine-tune Operator + LSTM end-to-end
+    # -------------------------------------------------------------
+
+    # ---------------------------
+    #  Stage 1 – Operator only
+    # ---------------------------
+    print("\n====================  Stage 1 : training Operator only  ====================")
+    lstm_network_stage1 = None                        # no LSTM in Stage 1
+    optimizer_stage1 = torch.optim.Adam(operator.parameters(), lr=1e-3, weight_decay=weight_decay)
+    scheduler_stage1 = LinearLRScheduler(optimizer=optimizer_stage1, max_epochs=epochs)
+    writer_stage1 = SummaryWriter(log_dir=os.path.join(log_dir, "stage1")) if log_tensorboard else None
+
+    trainer_stage1 = Trainer(
         operator=operator,
-        lstm_network=lstm_network,
-        optimizer=optimizer,
-        scheduler=scheduler,
+        lstm_network=lstm_network_stage1,
+        optimizer=optimizer_stage1,
+        scheduler=scheduler_stage1,
         loss_fn=mse_loss,
         device=device,
-        writer=writer,
-        use_lstm=lstm
+        writer=writer_stage1,
+        use_lstm=False,            # LSTM not used
     )
+    trainer_stage1.train(train_loader, val_loader, epochs)
 
-    trainer.train(train_loader, val_loader, epochs)
+    # ---------------------------
+    #  Stage 2 – LSTM only
+    # ---------------------------
+    print("\n====================  Stage 2 : training LSTM only  ====================")
+    # Freeze Operator weights
+    for p in operator.parameters():
+        p.requires_grad = False
+    operator.eval()
 
+    # Instantiate LSTM (fresh) if it does not yet exist
+    lstm_network = LSTM().to(device)
+
+    optimizer_stage2 = torch.optim.Adam(lstm_network.parameters(), lr=1e-3, weight_decay=weight_decay)
+    scheduler_stage2 = LinearLRScheduler(optimizer=optimizer_stage2, max_epochs=epochs)
+    writer_stage2 = SummaryWriter(log_dir=os.path.join(log_dir, "stage2")) if log_tensorboard else None
+
+    trainer_stage2 = Trainer(
+        operator=operator,
+        lstm_network=lstm_network,
+        optimizer=optimizer_stage2,
+        scheduler=scheduler_stage2,
+        loss_fn=mse_loss,
+        device=device,
+        writer=writer_stage2,
+        use_lstm=True,             # now we use the LSTM
+    )
+    trainer_stage2.train(train_loader, val_loader, epochs)
+
+    # ---------------------------
+    #  Stage 3 – fine-tune all
+    # ---------------------------
+    print("\n====================  Stage 3 : end-to-end fine-tuning  ====================")
+    # Un-freeze Operator parameters
+    for p in operator.parameters():
+        p.requires_grad = True
+    operator.train()
+
+    # Ensure LSTM weights are also trainable
+    for p in lstm_network.parameters():
+        p.requires_grad = True
+
+    optimizer_stage3 = torch.optim.Adam([
+        {"params": operator.parameters(), "lr": 1e-4},
+        {"params": lstm_network.parameters(), "lr": 1e-5},
+    ], weight_decay=weight_decay)
+    scheduler_stage3 = LinearLRScheduler(optimizer=optimizer_stage3, max_epochs=epochs)
+
+    writer_stage3 = SummaryWriter(log_dir=os.path.join(log_dir, "stage3")) if log_tensorboard else None
+
+    trainer_stage3 = Trainer(
+        operator=operator,
+        lstm_network=lstm_network,
+        optimizer=optimizer_stage3,
+        scheduler=scheduler_stage3,
+        loss_fn=mse_loss,
+        device=device,
+        writer=writer_stage3,
+        use_lstm=True,
+    )
+    trainer_stage3.train(train_loader, val_loader, epochs)
+
+    # -------------------------------------------------------------
+    #  VISUALISATION AFTER TRAINING
+    # -------------------------------------------------------------
     visualize_predictions(operator, lstm_network, train_dataset, num_samples=5, mode="train", device=device, log_dir=log_dir)
-    visualize_predictions(operator,lstm_network, test_dataset, num_samples=5, mode="test", device=device, log_dir=log_dir)
+    visualize_predictions(operator, lstm_network, test_dataset, num_samples=5, mode="test", device=device, log_dir=log_dir)
 
 
 if __name__ == "__main__":
