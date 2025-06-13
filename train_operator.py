@@ -32,7 +32,7 @@ def main():
     num_samples = 2000
     observed_fraction = 0.0004
     domain_fraction = 1
-    simulation_file = "snapshot_0608_164903_simulation_n20_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
+    simulation_file = "snapshot_0611_080748_simulation_n1000_nt5000_nx100_ny100_dt0.0001_dmin0.1_ntsensor20_dmax0.3_nblobs200_radius5_randomTrue.pt"
     simulation_file_path = os.path.join(script_dir, "datasets", "simulation", simulation_file)
     simulation_file = simulation_file.replace(".pt", "")
     
@@ -84,7 +84,7 @@ def main():
     ############################
 
     # Define hyperparameters
-    epochs = 1000
+    epochs = 200
     trunk_depth = 16
     branch_depth = 16
     trunk_width = 48
@@ -92,6 +92,7 @@ def main():
     batch_size = 32
     weight_decay = 0
     lstm = True
+
 
     num_sensors = sensor_coordinates.shape[1]
     new_u_shape = TensorShape(dim=1, size=([num_sensors]))
