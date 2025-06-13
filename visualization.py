@@ -29,8 +29,18 @@ def visualize_predictions(operator, lstm_network, test_dataset, num_samples, mod
         if lstm_network is not None:
             with torch.no_grad():
                 print("using lstm")
-                u = lstm_network(u_raw)  # Apply LSTM to condense sensor data
-                u = u[:,-1,:]
+                u_pred = lstm_network(u_raw)  # Apply LSTM to condense sensor data
+
+                # Compare LSTM output with actual last sensor values
+                actual_last_u = u_raw[:, -1]
+                predicted_last_u = u_pred[:, -1, :]
+                print("\n--- LSTM Visualization Debug ---")
+                print(f"Sample {i}:")
+                print("  Actual sensor values (last sequence step):\n", actual_last_u.squeeze().cpu().numpy())
+                print("  LSTM predicted values (last sequence step):\n", predicted_last_u.squeeze().cpu().numpy())
+                print("---------------------------------\n")
+
+                u = predicted_last_u
                 u = torch.unsqueeze(u, 1)  # Reshape to match expected input shape
                 prediction = operator(x, u, y).cpu().squeeze()
         else:
@@ -46,8 +56,6 @@ def visualize_predictions(operator, lstm_network, test_dataset, num_samples, mod
         v = v.squeeze().cpu()
         prediction = prediction.squeeze().cpu().numpy()
 
-        print("values: u_raw", u_raw)
-        
         ax1, ax2, ax3 = axes[i] if num_samples > 1 else axes  # Handle single sample case
 
         ax1.set_title("Input")
@@ -218,7 +226,6 @@ def plot_autocorrelation(series, max_lag: int = 50):
 
     plt.tight_layout()
     plt.show()
-
 
 # ---------------------------------------------------------------------------------- 
 
